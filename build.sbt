@@ -34,6 +34,8 @@ scalacOptions := Seq(
 
 val commonsVersion = "1.34.17"
 
+fork in Test := true
+
 libraryDependencies += "com.avsystem.commons" %% "commons-core" % commonsVersion
 libraryDependencies += "org.typelevel" %% "cats-effect" % "1.2.0"
 libraryDependencies += "co.fs2" %% "fs2-core" % "1.0.4"

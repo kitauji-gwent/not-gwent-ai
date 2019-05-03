@@ -54,13 +54,17 @@ object WebSocketES {
     val queue: Queue[IO, String],
     val endSignal: SignallingRef[IO, Boolean]
   ) extends WebSocketClient(uri) {
-    override def onOpen(handshakedata: ServerHandshake): Unit = {}
+    override def onOpen(handshakedata: ServerHandshake): Unit = {
+      println(s"Opened connectionwith message: ${handshakedata.getHttpStatusMessage}")
+    }
     override def onMessage(message: String): Unit =
       queue.enqueue1(message).unsafeRunSync()
     override def onClose(code: Int, reason: String, remote: Boolean): Unit =
       endSignal.set(true).unsafeRunSync()
-    override def onError(ex: Exception): Unit =
+    override def onError(ex: Exception): Unit = {
+      println(s"Connection to server failed: $ex")
       endSignal.set(true).unsafeRunSync()
+    }
   }
 
   def make[C, U](
@@ -74,7 +78,11 @@ object WebSocketES {
     def create = for {
       queue <- Queue.bounded[IO, String](1000)
       endSignal <- SignallingRef[IO, Boolean](false)
-      ws <- IO(new JsonWebsocketResource(new URI(uri), queue, endSignal))
+      ws <- IO {
+        val client = new JsonWebsocketResource(new URI(uri), queue, endSignal)
+        client.connectBlocking()
+        client
+      }
     } yield ws
 
     Resource.make(create)(ws => IO(ws.close())).map(ws => new WebSocketES(ws, commandNameF))

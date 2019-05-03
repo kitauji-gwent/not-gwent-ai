@@ -21,8 +21,9 @@ class GwentLikeServer(
     queue.update(conNum, Nil)
   }
 
-  override def onClose(conn: WebSocket, code: Int, reason: String, remote: Boolean): Unit =
+  override def onClose(conn: WebSocket, code: Int, reason: String, remote: Boolean): Unit = {
     queue.remove(conn.getAttachment[Int])
+  }
 
   override def onMessage(conn: WebSocket, message: String): Unit = {
     val messages = queue.apply(conn.getAttachment[Int])
@@ -30,7 +31,8 @@ class GwentLikeServer(
   }
 
   override def onError(conn: WebSocket, ex: Exception): Unit = {
-    queue.remove(conn.getAttachment[Int])
+    println(s"Server failed with $ex")
+    if (conn ne null) queue.remove(conn.getAttachment[Int])
   }
 
   override def onStart(): Unit = {}

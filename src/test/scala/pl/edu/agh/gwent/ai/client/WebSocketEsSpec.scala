@@ -12,31 +12,37 @@ import scala.concurrent.ExecutionContext
 class WebSocketEsSpec extends FlatSpec with Matchers {
   private implicit val cs: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
 
-  private val gwentServerResource: Resource[IO, GwentLikeServer] = Resource.make(
+  private def gwentServerResource(attemptNo: Int): Resource[IO, GwentLikeServer] = Resource.make(
     IO {
-      val server = new GwentLikeServer(InetSocketAddress.createUnresolved("127.0.0.1", 4242))
+      val server = new GwentLikeServer(new InetSocketAddress("localhost", 4241 + attemptNo))
       server.start()
       server
     }
-  )(s => IO(s.stop()))
+  )(s => IO(s.stop(1000)))
 
-  private val testEventStream = WebSocketES.make[String, String]("ws://127.0.0.1:4242", identity)
+  private def testEventStream(attemptNo: Int) = {
+    val port = 4241 + attemptNo
+    WebSocketES.make[String, String](s"ws://localhost:$port", identity)
+  }
 
   "WebSocketES" should "correctly connect to the server" in {
     val resource = for {
-      gs <- gwentServerResource
-      _ <- testEventStream
-    } yield gs.getConnections
+      gs <- gwentServerResource(1)
+      _ <- testEventStream(1)
+    } yield gs
 
-    val connectionNumber = resource.use(cons => IO.pure(cons.size())).unsafeRunSync()
+    val connectionNumber =
+      resource
+        .use(cons => IO(cons.getConnections.size()))
+        .unsafeRunSync()
     connectionNumber shouldEqual 1
   }
 
   it should "decode 'gwent-like` messages correctly" in {
 
     val resource = for {
-      gs <- gwentServerResource
-      es <- testEventStream
+      gs <- gwentServerResource(2)
+      es <- testEventStream(2)
     } yield gs -> es
 
     val result = resource
