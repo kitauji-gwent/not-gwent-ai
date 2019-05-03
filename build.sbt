@@ -37,10 +37,10 @@ val commonsVersion = "1.34.17"
 libraryDependencies += "com.avsystem.commons" %% "commons-core" % commonsVersion
 libraryDependencies += "org.typelevel" %% "cats-effect" % "1.2.0"
 libraryDependencies += "co.fs2" %% "fs2-core" % "1.0.4"
-libraryDependencies ++= Seq(
-  "com.typesafe.akka" %% "akka-http"   % "10.1.8",
-  "com.typesafe.akka" %% "akka-stream" % "2.5.19"
-)
+libraryDependencies += "org.java-websocket" % "Java-WebSocket" % "1.4.0"
+libraryDependencies += "org.tpolecat" %% "atto-core" % "0.6.5"
+libraryDependencies += "org.scalactic" %% "scalactic" % "3.0.5"
+libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.5" % Test
 
 resolvers += Resolver.sonatypeRepo("releases")
 

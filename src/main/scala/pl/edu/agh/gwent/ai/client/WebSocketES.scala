@@ -1,34 +1,32 @@
 package pl.edu.agh.gwent.ai.client
 
-import akka.actor.ActorSystem
-import cats.effect.{ContextShift, IO}
+import java.net.URI
+
+import atto._, Atto._
+import cats.effect._
 import com.avsystem.commons.serialization.GenCodec
-import akka.http.scaladsl.Http
-import akka.stream.{Materializer, OverflowStrategy}
-import akka.stream.scaladsl._
-import akka.http.scaladsl.model.ws._
 import com.avsystem.commons.serialization.json.{JsonStringInput, JsonStringOutput}
-import cats.syntax.all._
+import fs2.concurrent.{Queue, SignallingRef}
+import org.java_websocket.client.WebSocketClient
+import org.java_websocket.handshake.ServerHandshake
+import pl.edu.agh.gwent.ai.client.WebSocketES._
 
-import WebSocketES._
-
-class WebSocketES[C, U](commandNameF: C => String)(implicit
+class WebSocketES[C, U] private(
+  client: JsonWebsocketResource,
+  commandNameF: C => String)(implicit
   commandCodec: GenCodec[C],
   updateCodec: GenCodec[U],
   cs: ContextShift[IO],
-  as: ActorSystem,
-  mat: Materializer
 ) extends EventStream[IO, fs2.Stream[IO, ?], C, U] {
 
   private def encodeToProtocol(c: C) = {
     val jsString = JsonStringOutput.write(c)
-    TextMessage(s"42[${commandNameF(c)},$jsString]")
+    s"42[${commandNameF(c)},$jsString]"
   }
 
-  private def decodeFromProtocol(u: Message) = IO {
-    val msgStr = u.asTextMessage.getStrictText
+  private def decodeFromProtocol(msgStr: String) = IO {
     msgStr match {
-      case s42(tpe, content) =>
+      case s42(_, content) =>
         JsonStringInput.read[U](content)
       case s =>
         throw new Exception(s"Wrong shape of message: $s")
@@ -36,18 +34,61 @@ class WebSocketES[C, U](commandNameF: C => String)(implicit
   }
 
   override def process(commands: fs2.Stream[IO, C], consumer: U => IO[Unit]): IO[Unit] = for {
-    sink <- IO(Sink.foreachAsync[Message](1)(decodeFromProtocol(_).flatMap(consumer).unsafeToFuture()))
-    (sourceQueue, source) <- IO(Source.queue[Message](1000, OverflowStrategy.backpressure).preMaterialize())
-    flow <- IO(Flow.fromSinkAndSource(sink, source))
-    producer <- commands.evalMap(c => IO.fromFuture(IO(sourceQueue.offer(encodeToProtocol(c))))).compile.drain.start
-    _ <- IO(Http().singleWebSocketRequest(WebSocketRequest("ws://127.0.0.1"), flow)) <* producer.join
+    prod <- commands
+      .evalTap(c => IO(client.send(encodeToProtocol(c))))
+      .interruptWhen(client.endSignal.map(_ => true))
+      .compile.drain.start
+    cons <- client.queue.dequeue
+      .interruptWhen(client.endSignal.map(_ => true))
+      .evalTap(c => decodeFromProtocol(c).flatMap(consumer))
+      .compile.drain.start
+    _ <- prod.join
+    _ <- cons.join
   } yield ()
 }
 
 object WebSocketES {
 
+  private class JsonWebsocketResource(
+    uri: URI,
+    val queue: Queue[IO, String],
+    val endSignal: SignallingRef[IO, Boolean]
+  ) extends WebSocketClient(uri) {
+    override def onOpen(handshakedata: ServerHandshake): Unit = {}
+    override def onMessage(message: String): Unit =
+      queue.enqueue1(message).unsafeRunSync()
+    override def onClose(code: Int, reason: String, remote: Boolean): Unit =
+      endSignal.set(true).unsafeRunSync()
+    override def onError(ex: Exception): Unit =
+      endSignal.set(true).unsafeRunSync()
+  }
+
+  def make[C, U](
+    uri: String,
+    commandNameF: C => String
+  )(implicit
+    commandCodec: GenCodec[C],
+    updateCodec: GenCodec[U],
+    cs: ContextShift[IO],
+  ): Resource[IO, WebSocketES[C, U]] = {
+    def create = for {
+      queue <- Queue.bounded[IO, String](1000)
+      endSignal <- SignallingRef[IO, Boolean](false)
+      ws <- IO(new JsonWebsocketResource(new URI(uri), queue, endSignal))
+    } yield ws
+
+    Resource.make(create)(ws => IO(ws.close())).map(ws => new WebSocketES(ws, commandNameF))
+  }
+
   private[WebSocketES] object s42 {
-    def unapply(arg: String): Option[(String, String)] = ???
+
+    private val eventName = char('\"') ~> stringOf(letter | digit | whitespace | char(':')) <~ char('\"')
+    private val eventBody = stringOf(letter | digit | whitespace | oneOf("{}\",:_"))
+
+    private val parser =
+      string("42") ~> envelopes(eventName ~ (char(',') ~> eventBody))
+
+    def unapply(arg: String): Option[(String, String)] = parser.parse(arg).option
   }
 
 }
