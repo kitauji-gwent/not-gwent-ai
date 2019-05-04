@@ -39,8 +39,7 @@ fork in Test := true
 libraryDependencies += "com.avsystem.commons" %% "commons-core" % commonsVersion
 libraryDependencies += "org.typelevel" %% "cats-effect" % "1.2.0"
 libraryDependencies += "co.fs2" %% "fs2-core" % "1.0.4"
-libraryDependencies += "org.java-websocket" % "Java-WebSocket" % "1.4.0"
-libraryDependencies += "org.tpolecat" %% "atto-core" % "0.6.5"
+libraryDependencies += "io.socket" % "socket.io-client" % "1.0.0"
 libraryDependencies += "org.scalactic" %% "scalactic" % "3.0.5"
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.5" % Test
 
