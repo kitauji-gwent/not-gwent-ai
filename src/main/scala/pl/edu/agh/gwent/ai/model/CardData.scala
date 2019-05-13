@@ -5,7 +5,7 @@ import com.avsystem.commons.serialization.GenCodec
 case class CardData(
   name: String,
   power: Int,
-  ability: String,
+  ability: AbilityData,
   img: String,
   faction: Faction,
   `type`: CardType

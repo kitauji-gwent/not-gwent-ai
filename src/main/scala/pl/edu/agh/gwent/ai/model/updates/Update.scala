@@ -1,11 +1,7 @@
 package pl.edu.agh.gwent.ai.model
 package updates
 
-import com.avsystem.commons.serialization.GenCodec
-
-object Update {
-  implicit val codec: GenCodec[Update] = GenCodec.materialize
-}
+import com.avsystem.commons.serialization.{HasGenCodec, transparent}
 
 sealed trait Update
 
@@ -23,12 +19,18 @@ case class HandUpdate(
 case class InfoUpdate(
   info: BattleSide,
   leader: Card
-)
+) extends Update
 
 sealed trait LobbyUpdate extends Update
 
 case class NameUpdate(name: UserID) extends LobbyUpdate
+
+@transparent
 case class JoinRoom(roomID: String) extends LobbyUpdate
+
+object JoinRoom extends HasGenCodec[JoinRoom]
+
 case class InitBattle(side: String, foeSide: String) extends LobbyUpdate
 
+case object NoOpAck extends Update
 

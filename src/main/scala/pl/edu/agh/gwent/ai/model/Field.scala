@@ -3,8 +3,8 @@ package pl.edu.agh.gwent.ai.model
 import com.avsystem.commons.serialization.GenCodec
 
 case class Field(
-  horn: Boolean,
-  cars: Set[Card],
+  horn: Option[Card],
+  cards: Set[Card],
   score: Int
 )
 

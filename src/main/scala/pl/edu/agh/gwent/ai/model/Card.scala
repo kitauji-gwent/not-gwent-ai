@@ -1,6 +1,6 @@
 package pl.edu.agh.gwent.ai.model
 
-import com.avsystem.commons.serialization.GenCodec
+import com.avsystem.commons.serialization.{GenCodec, whenAbsent}
 
 case class Card(
   _owner: UserID,
@@ -12,8 +12,10 @@ case class Card(
   _key: String,
 //  _boost: Any,
   _forcedPower: Int,
-  power: Int,
-  diff: Int,
+  @whenAbsent(Option.empty[Int])
+  power: Option[Int],
+  @whenAbsent(Option.empty[Int])
+  diff: Option[Int],
 //  diffPos: Option[Any]
 ) {}
 
