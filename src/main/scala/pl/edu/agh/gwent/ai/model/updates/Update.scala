@@ -6,6 +6,7 @@ import com.avsystem.commons.serialization.{HasGenCodec, transparent}
 sealed trait Update
 
 case class FieldsUpdate(
+  _roomSide: String,
   close: Field,
   ranged: Field,
   siege: Field,
@@ -13,13 +14,20 @@ case class FieldsUpdate(
 ) extends Update
 
 case class HandUpdate(
+  _roomSide: String,
   cards: Set[Card]
 ) extends Update
 
 case class InfoUpdate(
+  _roomSide: String,
   info: BattleSide,
   leader: Card
 ) extends Update
+
+case class WaitingUpdate(
+  waiting: Boolean
+) extends Update
+
 
 sealed trait LobbyUpdate extends Update
 

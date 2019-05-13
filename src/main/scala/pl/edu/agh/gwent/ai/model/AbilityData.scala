@@ -26,10 +26,10 @@ object AbilityData {
       Try(Simple(input.readSimple().readString()))
         .orElse(Try(Complex(input.readList().iterator(_.readSimple().readString()).toList)))
         .orElse(Try(if (input.readNull()) Null else throw new Exception("Cannot read AbilityData value")))
-      .fold(
-        throw _,
-        identity
-      )
+        .fold(
+          throw _,
+          identity
+        )
 
     override def write(output: Output, value: AbilityData): Unit = ()
   }

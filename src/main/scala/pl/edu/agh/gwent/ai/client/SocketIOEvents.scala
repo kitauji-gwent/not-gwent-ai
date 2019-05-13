@@ -77,7 +77,7 @@ object SocketIOEvents {
     val codecs = Map(event:_*)
     def decode(name: String, argCodec: GenCodec[_ <: U])(arg: AnyRef): U = {
       implicit val codec: GenCodec[U] = argCodec.asInstanceOf[GenCodec[U]]
-      println(s"Got event: $arg")
+      println(s"Got event: $name: $arg")
       arg match {
         case js: JSONObject =>
           JsonStringInput.read[U](js.toString)
