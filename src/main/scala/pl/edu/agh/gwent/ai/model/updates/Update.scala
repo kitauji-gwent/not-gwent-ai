@@ -31,7 +31,7 @@ case class WaitingUpdate(
 case class PlayedUpdate(
   _roomSide: String,
   cardID: CardID,
-  `type`: String
+  _type: String
 ) extends Update
 
 
