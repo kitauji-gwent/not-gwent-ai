@@ -94,6 +94,9 @@ object Main extends IOApp {
           case u@HandUpdate(_roomSide, _) if _roomSide == state.side =>
             println(s"Got game message: $u")
             IO(List.empty -> state.copy(info = u))
+          case u@PlayedUpdate(_roomSide, cardID, "played:horn")  =>
+            println(s"Got game message: $u")
+            IO(List(SelectHorn(CardType.CloseCombat)) -> state)
           case u =>
             println(s"Got game message: $u")
             IO(List.empty -> state)
@@ -112,7 +115,7 @@ object Main extends IOApp {
       es.publish(s)
     }
 
-    SocketIOEvents.make[Command, Update]("http://192.168.0.183:16918", events, _.event, _.hasBody).use { es =>
+    SocketIOEvents.make[Command, Update]("http://localhost:16918", events, _.event, _.hasBody).use { es =>
       simpleHandler(es) as ExitCode.Success
     }
 

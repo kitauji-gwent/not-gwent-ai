@@ -28,6 +28,12 @@ case class WaitingUpdate(
   waiting: Boolean
 ) extends Update
 
+case class PlayedUpdate(
+  _roomSide: String,
+  cardID: CardID,
+  `type`: String
+) extends Update
+
 
 sealed trait LobbyUpdate extends Update
 

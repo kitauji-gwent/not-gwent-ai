@@ -80,6 +80,7 @@ object SocketIOEvents {
       println(s"Got event: $name: $arg")
       arg match {
         case js: JSONObject =>
+          js.put("type", name)
           JsonStringInput.read[U](js.toString)
         case js: String =>
           JsonStringInput.read[U](s""""$js"""")
