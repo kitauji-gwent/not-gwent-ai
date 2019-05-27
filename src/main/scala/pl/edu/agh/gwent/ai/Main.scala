@@ -127,6 +127,10 @@ object Main extends IOApp {
           case u@PlayedUpdate(_roomSide, _, "played:horn")  if _roomSide == state.side =>
             println(s"Got game message: $u")
             IO(List(SelectHorn(CardType.CloseCombat)) -> state)
+          case u@FieldsUpdate(_roomSide, close, ranged, siege, w) if _roomSide == state.side =>
+            println(s"Got init: $u")
+            val fields = FieldState(close = close, ranged = ranged, siege = siege, weather = w)
+            IO(List.empty -> state.copy(myFields = fields))
           case u =>
             println(s"Got game message: $u")
             IO(List.empty -> state)
