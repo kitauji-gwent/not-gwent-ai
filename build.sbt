@@ -42,6 +42,10 @@ libraryDependencies += "co.fs2" %% "fs2-core" % "1.0.4"
 libraryDependencies += "io.socket" % "socket.io-client" % "1.0.0"
 libraryDependencies += "org.scalactic" %% "scalactic" % "3.0.5"
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.5" % Test
+libraryDependencies += "org.deeplearning4j" % "deeplearning4j-core" % "1.0.0-beta4"
+libraryDependencies += "org.deeplearning4j" % "rl4j-core" % "1.0.0-beta4"
+
+libraryDependencies += "org.nd4j" % "nd4j-native-platform" % "1.0.0-beta4"
 
 resolvers += Resolver.sonatypeRepo("releases")
 
