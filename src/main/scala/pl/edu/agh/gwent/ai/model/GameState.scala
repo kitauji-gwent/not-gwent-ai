@@ -2,32 +2,13 @@ package pl.edu.agh.gwent.ai.model
 
 import pl.edu.agh.gwent.ai.model.updates.{FieldsUpdate, HandUpdate, InfoUpdate}
 
-object GameState {
-
-  def init(
-    ownLeader: Card,
-    foeLeader: Card,
-    info: InfoUpdate,
-    ownFields: FieldsUpdate,
-    foeFields: FieldsUpdate,
-    ownHand: HandUpdate,
-    foeHand: HandUpdate
-  ): GameState = GameState(
-    ownLeader,
-    foeLeader,
-    ownSide = info.info,
-    foeSide = null,
-    ownFields = FieldState(ownFields.close, ownFields.ranged, ownFields.siege, ownFields.weather),
-    foeFields = FieldState(foeFields.close, foeFields.ranged, foeFields.siege, foeFields.weather),
-    ownHand = HandState(ownHand.cards),
-    foeHand = HandState(foeHand.cards)
-  )
-
-}
+object GameState
 
 case class GameState(
   ownLeader: Card,
   foeLeader: Card,
+  ownSideN: String,
+  foeSideN: String,
   ownSide: BattleSide,
   foeSide: BattleSide,
   ownFields: FieldState,
@@ -36,17 +17,32 @@ case class GameState(
   foeHand: HandState
 ) {
 
-  def applyUpdate(update: InfoUpdate): GameState = copy(
-    ownSide = update.info
-  )
+  def applyUpdate(update: InfoUpdate): GameState =
+    if (update._roomSide == ownSideN)
+      copy(ownSide = update.info)
+    else
+      copy(foeSide = update.info)
+
+  def applyUpdate(update: FieldsUpdate): GameState = {
+    val fields = FieldState(update.close, update.ranged, update.siege, update.weather)
+    if (update._roomSide == ownSideN)
+      copy(ownFields = fields)
+    else
+      copy(foeFields = fields)
+  }
+
+  def applyUpdate(update: HandUpdate): GameState = {
+    if (update._roomSide == ownSideN)
+      copy(ownHand = HandState(update.cards))
+    else
+      copy(foeHand = HandState(update.cards))
+  }
 
 }
 
 case class HandState(
   cards: Set[Card]
-) {
-  def applyUpdate(update: HandUpdate): HandState = HandState(cards ++ update.cards)
-}
+)
 
 case class FieldState(
   close: Field,

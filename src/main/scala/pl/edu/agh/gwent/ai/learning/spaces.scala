@@ -3,9 +3,7 @@ package pl.edu.agh.gwent.ai.learning
 import org.deeplearning4j.rl4j.space._
 import org.nd4j.linalg.api.ndarray.INDArray
 import pl.edu.agh.gwent.ai.model.{Card, CardID, GameState}
-import pl.edu.agh.gwent.ai.model.commands._
 
-import scala.util.Random
 
 class GwentStateSpace extends ObservationSpace[GameState] {
   override def getName: String = ???

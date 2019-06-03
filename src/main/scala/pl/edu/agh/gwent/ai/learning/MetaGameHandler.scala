@@ -1,31 +1,30 @@
 package pl.edu.agh.gwent.ai.learning
 
 import cats.effect.IO
-import cats.effect.concurrent.Deferred
-import cats.syntax.all._
 import cats.instances.option._
+import cats.syntax.all._
+import fs2._
 import pl.edu.agh.gwent.ai.model.commands._
 import pl.edu.agh.gwent.ai.model.updates._
-import pl.edu.agh.gwent.ai.model.{BattleSide, Card, Field, FieldState, GameState, HandState}
-import fs2._
-
-import scala.util.Random
+import pl.edu.agh.gwent.ai.model._
 
 
 object MetaGameHandler {
 
   val `Northern-Kingdoms` = "northern"
 
-  def initGameState(es: GameES, envName: String): IO[GameState] = {
+  def initGameState(es: GameES, envName: String): IO[(GameState, Boolean)] = {
 
     sealed trait InternalGS {
       def build: Option[GameState]
+      def isFirst: Option[Boolean]
     }
 
     case class StateBuilder(
       roomID: String,
       ownSideN: String,
       foeSideN: String,
+      isFirst: Option[Boolean] = None,
       ownLeader: Option[Card] = None,
       foeLeader: Option[Card] = None,
       ownSide: Option[BattleSide] = None,
@@ -38,12 +37,13 @@ object MetaGameHandler {
 
       def build: Option[GameState] =
         (ownLeader, foeLeader, ownSide, foeSide, ownFields, foeFields, ownHand, foeHand)
-          .mapN(GameState(_, _, _, _, _, _, _, _))
+          .mapN(GameState(_, _,ownSideN, foeSideN, _, _, _, _, _, _))
 
     }
 
     case class PlaceHolder(roomID: String) extends InternalGS {
       override def build: Option[GameState] = None
+      override def isFirst: Option[Boolean] = None
     }
 
     val placeHolder: (List[Command], InternalGS) = List.empty -> PlaceHolder("")
@@ -99,6 +99,9 @@ object MetaGameHandler {
           val fields = FieldState(close = c, ranged = r, siege = s, weather = w)
           val newState = state.copy(foeFields = fields.some)
           List.empty -> newState
+        case u@WaitingUpdate(waiting) =>
+          println(s"Got init: $u")
+          List.empty -> state.copy(isFirst = Some(waiting))
         case u =>
           println(s"Got init: $u")
           List.empty -> state
@@ -118,35 +121,98 @@ object MetaGameHandler {
       _ <- es.publish(Stream(Name(envName), ChooseDeck(`Northern-Kingdoms`), Enqueue))
       gs <- es.events.scan(placeHolder)((old, up) => go(old._2, up)).evalMap({
         case (commands, state) =>
-          es.publish(Stream.emits(commands)) as state.build
-      }).collectFirst({ case Some(gs) => gs }).compile.toList
+          es.publish(Stream.emits(commands)) as (state.build product state.isFirst)
+      }).collectFirst({ case Some(p) => p }).compile.toList
     } yield gs.head
 
   }
 
   /**
     * Applies command and returns new game state, as well as information if round has ended
+    *
     * @param es connection to the game
     * @return
     */
-  def applyCommand(es: GameES, command: List[GameCommand]): IO[(GameState, Boolean)] = ???
+  def applyCommand(es: GameES, oldState: GameState, command: List[GameCommand], shouldWait: Boolean): IO[(GameState, Boolean)] = {
+
+    def handleUpdate(
+      currentState: GameState,
+      update: Update
+    ): (GameState, Boolean) = {
+      println(s"Current hand: ${currentState.ownSideN}, ${currentState.ownHand.cards.map(_._id).mkString("{", ", ", "}")}")
+      update match {
+        case i: InfoUpdate =>        (currentState.applyUpdate(i), false)
+        case f: FieldsUpdate =>      (currentState.applyUpdate(f), false)
+        case h: HandUpdate =>
+          println(s"Updating hand: ${h._roomSide}, ${h.cards.map(_._id).mkString("{", ", ", "}")}")
+                                     (currentState.applyUpdate(h), false)
+        case WaitingUpdate(false) => (currentState, true)
+        case _ =>                    (currentState, false)
+      }
+    }
+
+    val code = for {
+      _ <- if (shouldWait) {
+        es.events.collectFirst({ case WaitingUpdate(false) => }).compile.drain
+      } else {
+        IO.unit
+      }
+      _ <- es.publish(Stream.emits(command))
+      gs <- es.events
+        .scan(oldState -> false) {
+          case ((oldGs, false), up) =>
+            handleUpdate(oldGs, up)
+          case (p, _) =>
+            p
+        }
+        .collectFirst {
+          case (s, true) =>
+            s
+        }
+        .compile
+        .toList
+    } yield gs.head
+
+    code product IO.pure(false)
+  }
 
 
-  private val random = new Random()
+  /**
+    * Given specific card generate command based on game-state
+    * Most cards are fire-and-forget types, while others require more actions
+    * (only allowed is decoy, which will be followed by replacing either lowest-ranking spy or highest ranking non-hero)
+    *
+    * @param card  card to be played
+    * @param state game state
+    * @return Commands to be sent
+    */
   def generateCommand(card: Card, state: GameState): List[GameCommand] = {
 
     def canReplace(card: Card) = !(Set("hero", "decoy") contains card._data.ability.abilityCode)
 
-    if (card._data.ability.abilityCode == "decoy") {
+    if (!state.ownHand.cards.exists(_._id == card._id)) {
+      List.empty
+    } else if (card._data.ability.abilityCode == "decoy") {
+
+      val cards = (state.ownFields.siege.cards ++ state.ownFields.ranged.cards ++ state.ownFields.close.cards).toArray
+
+      val spys = cards
+        .iterator.filter(_._data.ability.abilityCode == "spy")
+
+      val normals = cards
+        .iterator.filter(canReplace)
+
+
       val randomCard =
-        random.shuffle(state.ownFields.siege.cards ++ state.ownFields.ranged.cards ++ state.ownFields.close.cards)
-          .find(canReplace)
+        if (spys.nonEmpty) spys.minBy(_._data.power).some
+        else if (normals.nonEmpty) normals.maxBy(_._data.power).some
+        else None
 
       randomCard match {
         case Some(target) =>
           List(PlayCard(card._id), DecoyReplaceWith(target._id))
         case None =>
-          List(Pass)
+          List.empty
       }
 
     } else {
