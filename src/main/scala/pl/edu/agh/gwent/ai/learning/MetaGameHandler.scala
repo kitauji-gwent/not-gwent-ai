@@ -129,7 +129,7 @@ object MetaGameHandler {
     * @param es connection to the game
     * @return
     */
-  def applyCommand(es: GameES): IO[(GameState, Boolean)] = ???
+  def applyCommand(es: GameES, command: List[GameCommand]): IO[(GameState, Boolean)] = ???
 
 
   private val random = new Random()

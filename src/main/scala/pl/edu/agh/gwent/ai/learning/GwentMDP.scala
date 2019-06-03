@@ -3,54 +3,59 @@ package pl.edu.agh.gwent.ai.learning
 import cats.effect.IO
 import org.deeplearning4j.gym.StepReply
 import org.deeplearning4j.rl4j.mdp.MDP
-import org.deeplearning4j.rl4j.space.ObservationSpace
+import org.deeplearning4j.rl4j.space.{DiscreteSpace, ObservationSpace}
 import org.json.JSONObject
-import pl.edu.agh.gwent.ai.model.{Card, GameState}
+import pl.edu.agh.gwent.ai.model.{Card, CardID, GameState}
 import pl.edu.agh.gwent.ai.model.commands.GameCommand
 
 class GwentMDP(
   esFactory: IO[GameES],
   closeOp: IO[Unit],
-  envName: String
-) extends MDP[GameState, List[GameCommand], GwentActionSpace] {
+  cards: Map[CardID, Card],
+  envName: String,
+  lowestCard: CardID,
+  highesCard: CardID
+) extends DiscreteMDP[GameState] {
 
-  private var currentGame: GameES = _
-  private var currentRound: Int = _
-  private var currentState: GameState = _
-  var isDone: Boolean = _
+  private var es: GameES = _
+  private var gs: GameState = _
+  var isDone: Boolean = false
 
   override def getObservationSpace: ObservationSpace[GameState] = ???
-  override def getActionSpace: GwentActionSpace = {
-    val getCards = () => currentState.ownHand.cards
-    def commandsOf(card: Card) = MetaGameHandler.generateCommand(card, currentState)
-    new GwentActionSpace(getCards, commandsOf)
-  }
+
+  override def getActionSpace: DiscreteSpace = GwentActionSpace.create()
+
   override def reset(): GameState = {
     val code = for {
-      es <- esFactory
-      _ <- IO(currentGame = es)
-      _ <- IO(currentRound = 1)
-      state <- MetaGameHandler.initGameState(es, envName)
-      _ <- IO(currentState = state)
-    } yield state
+      _ <- closeOp
+      nes <- esFactory
+      _ <- IO(es = nes)
+      ngs <- MetaGameHandler.initGameState(nes, envName)
+      _ <- IO(gs = ngs)
+    } yield ngs
 
     code.unsafeRunSync()
   }
+
   override def close(): Unit = closeOp.unsafeRunSync()
-  override def step(action: List[GameCommand]): StepReply[GameState] = {
-    val (state, roundEnd) = MetaGameHandler.applyCommand(currentGame).unsafeRunSync()
-    currentState = state
-    val reward: Double = ???
-    val done = currentRound == 2 && roundEnd
-    isDone = done
-    if (currentRound == 1 && roundEnd) currentRound = 2
+
+  override def step(action: Integer): StepReply[GameState] = {
+    val card = GwentActionSpace.getCardOf(cards, action)
+    val commands = MetaGameHandler.generateCommand(card, gs)
+    (gs, isDone) = MetaGameHandler.applyCommand(es, commands).unsafeRunSync()
     new StepReply[GameState](
-      state,
-      reward,
-      done,
+      gs,
+      ???,
+      isDone,
       new JSONObject()
     )
+
   }
 
-  override def newInstance(): MDP[GameState, List[GameCommand], GwentActionSpace] = ???
+  override def newInstance(): MDP[GameState, Integer, DiscreteSpace] = ???
+}
+
+object GwentMDP {
+
+  def default: GwentMDP = ???
 }

@@ -4,12 +4,14 @@ import org.deeplearning4j.rl4j.learning.sync.qlearning.QLearning
 import org.deeplearning4j.rl4j.learning.sync.qlearning.discrete.QLearningDiscreteDense
 import org.deeplearning4j.rl4j.mdp.MDP
 import org.deeplearning4j.rl4j.network.dqn.DQNFactoryStdDense
+import org.deeplearning4j.rl4j.util.DataManager
 import org.nd4j.linalg.learning.config.Adam
+import pl.edu.agh.gwent.ai.model.GameState
 
 
 object FeatureGenerator {
 
-  val env = new MDP
+  val env = GwentMDP.default
 
 
   val config = new QLearning.QLConfiguration(
@@ -29,5 +31,17 @@ object FeatureGenerator {
   )
 
   val factory = DQNFactoryStdDense.Configuration.builder()
-    .l2(0.001).updater(new Adam(0.0005)).numHiddenNodes()
+    .l2(0.001).updater(new Adam(0.0005)).numHiddenNodes(16).numLayer(3).build()
+
+  def main(args: Array[String]): Unit = {
+
+    val dm = new DataManager(true)
+
+    val qlearning = new QLearningDiscreteDense[GameState](env, factory, config, dm)
+
+
+
+  }
+
+
 }
