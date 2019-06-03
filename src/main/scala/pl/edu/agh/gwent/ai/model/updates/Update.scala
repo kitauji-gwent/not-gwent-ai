@@ -34,6 +34,9 @@ case class PlayedUpdate(
   _type: String
 ) extends Update
 
+case class GameOver(
+  winner: String
+) extends Update
 
 sealed trait LobbyUpdate extends Update
 

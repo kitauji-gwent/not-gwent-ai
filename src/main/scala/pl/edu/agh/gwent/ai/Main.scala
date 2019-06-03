@@ -29,7 +29,8 @@ object Main extends IOApp {
       "played:horn" -> GenCodec[PlayedUpdate],
       "update:hand" -> GenCodec[HandUpdate],
       "update:fields" -> GenCodec[FieldsUpdate],
-      "update:info" -> GenCodec[InfoUpdate]
+      "update:info" -> GenCodec[InfoUpdate],
+      "gameover" -> GenCodec[GameOver]
     )
 
     def simpleHandler(
@@ -57,13 +58,13 @@ object Main extends IOApp {
         _ <- IO(println(s"Selected card: $card"))
         _ <- IO(println(s"Selected commands: $commands"))
 
-        (gs, _) <-
+        (gs, isOver) <-
           if (commands.isEmpty)
             MetaGameHandler.applyCommand(es, old, List(Pass), shouldWait = false)
           else
             MetaGameHandler.applyCommand(es, old, commands, shouldWait = false)
 
-      } yield (gs, false)
+      } yield (gs, isOver)
 
       for {
         gs <- MetaGameHandler.initGameState(es, "test42")

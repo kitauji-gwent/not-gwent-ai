@@ -11,6 +11,7 @@ package object updates {
   implicit val initBtCodec: GenCodec[InitBattle] = GenCodec.materialize
   implicit val playUpCodec: GenCodec[PlayedUpdate] = GenCodec.materialize
   implicit val waitUpCodec: GenCodec[WaitingUpdate] = GenCodec.materialize
+  implicit val gameOvCodec: GenCodec[GameOver] = GenCodec.materialize
 
   type NoOpAck = NoOpAck.type
   implicit object noOpAckCodec extends GenCodec[NoOpAck] {

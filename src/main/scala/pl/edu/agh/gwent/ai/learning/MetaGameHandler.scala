@@ -1,6 +1,7 @@
 package pl.edu.agh.gwent.ai.learning
 
-import cats.effect.IO
+import cats.effect.{ContextShift, IO}
+import cats.effect.concurrent.Deferred
 import cats.instances.option._
 import cats.syntax.all._
 import fs2._
@@ -8,8 +9,12 @@ import pl.edu.agh.gwent.ai.model.commands._
 import pl.edu.agh.gwent.ai.model.updates._
 import pl.edu.agh.gwent.ai.model._
 
+import scala.concurrent.ExecutionContext
+
 
 object MetaGameHandler {
+
+  private implicit val cs: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
 
   val `Northern-Kingdoms` = "northern"
 
@@ -135,23 +140,26 @@ object MetaGameHandler {
     */
   def applyCommand(es: GameES, oldState: GameState, command: List[GameCommand], shouldWait: Boolean): IO[(GameState, Boolean)] = {
 
-    def handleUpdate(
+    def handleUpdate(overSignal: Deferred[IO, Boolean])(
       currentState: GameState,
       update: Update
-    ): (GameState, Boolean) = {
+    ): IO[(GameState, Boolean)] = {
       println(s"Current hand: ${currentState.ownSideN}, ${currentState.ownHand.cards.map(_._id).mkString("{", ", ", "}")}")
       update match {
-        case i: InfoUpdate =>        (currentState.applyUpdate(i), false)
-        case f: FieldsUpdate =>      (currentState.applyUpdate(f), false)
+        case i: InfoUpdate =>        IO.pure((currentState.applyUpdate(i), false))
+        case f: FieldsUpdate =>      IO.pure((currentState.applyUpdate(f), false))
         case h: HandUpdate =>
           println(s"Updating hand: ${h._roomSide}, ${h.cards.map(_._id).mkString("{", ", ", "}")}")
-                                     (currentState.applyUpdate(h), false)
-        case WaitingUpdate(false) => (currentState, true)
-        case _ =>                    (currentState, false)
+                                     IO.pure((currentState.applyUpdate(h), false))
+        case WaitingUpdate(false) => IO.pure((currentState, true))
+        case GameOver(_)          =>
+          overSignal.complete(true) as (currentState, true)
+        case _ =>                    IO.pure((currentState, false))
       }
     }
 
     val code = for {
+      isOverP <- Deferred[IO, Boolean]
       _ <- if (shouldWait) {
         es.events.collectFirst({ case WaitingUpdate(false) => }).compile.drain
       } else {
@@ -159,11 +167,11 @@ object MetaGameHandler {
       }
       _ <- es.publish(Stream.emits(command))
       gs <- es.events
-        .scan(oldState -> false) {
+        .evalScan(oldState -> false) {
           case ((oldGs, false), up) =>
-            handleUpdate(oldGs, up)
+            handleUpdate(isOverP)(oldGs, up)
           case (p, _) =>
-            p
+            IO.pure(p)
         }
         .collectFirst {
           case (s, true) =>
@@ -171,9 +179,11 @@ object MetaGameHandler {
         }
         .compile
         .toList
-    } yield gs.head
+      _ <- isOverP.complete(false).handleError(_ => ())
+      isOver <- isOverP.get
+    } yield gs.head -> isOver
 
-    code product IO.pure(false)
+    code
   }
 
 
@@ -215,6 +225,13 @@ object MetaGameHandler {
           List.empty
       }
 
+    } else if (card._key == "commanders_horn") {
+
+      val (_, maxType) = List(state.ownFields.close -> CardType.CloseCombat,
+                        state.ownFields.ranged -> CardType.Ranged,
+                        state.ownFields.siege -> CardType.Siege).maxBy(_._1.score)
+
+      List(PlayCard(card._id), SelectHorn(maxType))
     } else {
       List(PlayCard(card._id))
     }
