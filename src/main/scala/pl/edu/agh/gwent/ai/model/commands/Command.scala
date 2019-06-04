@@ -31,6 +31,12 @@ case class SelectHorn(field: CardType) extends GameCommand {
   override def event: String = "horn:field"
   override def hasBody: Boolean = true
 }
+
+case class MedicChooseCard(cardID: Option[CardID]) extends GameCommand {
+  override def event: String = "medic:chooseCardFromDiscard"
+  override def hasBody: Boolean = cardID.isDefined
+}
+
 case class DecoyReplaceWith(cardID: CardID) extends GameCommand {
   override def event: String = "decoy:replaceWith"
   override def hasBody: Boolean = true

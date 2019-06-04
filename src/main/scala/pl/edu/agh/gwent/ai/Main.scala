@@ -30,6 +30,7 @@ object Main extends IOApp {
       "update:hand" -> GenCodec[HandUpdate],
       "update:fields" -> GenCodec[FieldsUpdate],
       "update:info" -> GenCodec[InfoUpdate],
+      "set:passing" -> GenCodec[PassingUpdate],
       "gameover" -> GenCodec[GameOver]
     )
 
@@ -42,7 +43,6 @@ object Main extends IOApp {
       def selectCard(state: GameState): Option[Card] = {
         state.ownHand.cards
           .iterator
-          .filter(_._data.ability.abilityCode != "medic")
           .toList
           .maximumOption
       }
@@ -54,21 +54,25 @@ object Main extends IOApp {
           IO.unit
         }
         card <- IO(selectCard(old))
-        commands = card.map(MetaGameHandler.generateCommand(_, old)).getOrElse(List.empty)
+        commands = card.map(MetaGameHandler.generateCommand(defaultInstance)(_, old)).getOrElse(List.empty)
         _ <- IO(println(s"Selected card: $card"))
         _ <- IO(println(s"Selected commands: $commands"))
 
         (gs, isOver) <-
-          if (commands.isEmpty)
-            MetaGameHandler.applyCommand(es, old, List(Pass), shouldWait = false)
+          if ((old.ownSide.score > old.foeSide.score && old.foeSide.isPassing) || commands.isEmpty)
+            MetaGameHandler.applyCommand(defaultInstance)(es, old, List(Pass), shouldWait = false)
           else
-            MetaGameHandler.applyCommand(es, old, commands, shouldWait = false)
+            MetaGameHandler.applyCommand(defaultInstance)(es, old, commands, shouldWait = false)
 
       } yield (gs, isOver)
 
       for {
-        gs <- MetaGameHandler.initGameState(es, "test42")
-        _ <- Stream.iterateEval(gs)((handleTick _).tupled).compile.drain
+        (gs, shouldWait) <- MetaGameHandler.initGameState(defaultInstance)(es, "test42")
+        _ <- IO(println(s"Current state: ${gs.toArray.mkString("[", ", ", "]")}"))
+        _ <- Stream.iterateEval((gs, shouldWait, false))({
+          case (state, sw, end) =>
+            handleTick(state, sw).map { case (ns, nend) => (ns, false, nend) }
+        }).takeWhile(!_._3).compile.drain
       } yield ()
     }
 

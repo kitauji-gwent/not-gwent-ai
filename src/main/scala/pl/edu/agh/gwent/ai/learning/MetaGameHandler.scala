@@ -18,7 +18,8 @@ object MetaGameHandler {
 
   val `Northern-Kingdoms` = "northern"
 
-  def initGameState(es: GameES, envName: String): IO[(GameState, Boolean)] = {
+  def initGameState(inst: GameInstance)(es: GameES, envName: String): IO[(inst.GameState, Boolean)] = {
+    import inst._
 
     sealed trait InternalGS {
       def build: Option[GameState]
@@ -138,7 +139,8 @@ object MetaGameHandler {
     * @param es connection to the game
     * @return
     */
-  def applyCommand(es: GameES, oldState: GameState, command: List[GameCommand], shouldWait: Boolean): IO[(GameState, Boolean)] = {
+  def applyCommand(inst: GameInstance)(es: GameES, oldState: inst.GameState, command: List[GameCommand], shouldWait: Boolean): IO[(inst.GameState, Boolean)] = {
+    import inst._
 
     def handleUpdate(overSignal: Deferred[IO, Boolean])(
       currentState: GameState,
@@ -151,7 +153,12 @@ object MetaGameHandler {
         case h: HandUpdate =>
           println(s"Updating hand: ${h._roomSide}, ${h.cards.map(_._id).mkString("{", ", ", "}")}")
                                      IO.pure((currentState.applyUpdate(h), false))
+
+        case p: PassingUpdate =>
+          println(s"Updating round state: $p")
+                                     IO.pure((currentState.applyPassing(p), false))
         case WaitingUpdate(false) => IO.pure((currentState, true))
+
         case GameOver(_)          =>
           overSignal.complete(true) as (currentState, true)
         case _ =>                    IO.pure((currentState, false))
@@ -183,7 +190,7 @@ object MetaGameHandler {
       isOver <- isOverP.get
     } yield gs.head -> isOver
 
-    code
+    if (command.nonEmpty) code else IO.pure(oldState -> false)
   }
 
 
@@ -196,25 +203,24 @@ object MetaGameHandler {
     * @param state game state
     * @return Commands to be sent
     */
-  def generateCommand(card: Card, state: GameState): List[GameCommand] = {
+  def generateCommand(inst: GameInstance)(card: Card, state: inst.GameState): List[GameCommand] = {
 
     def canReplace(card: Card) = !(Set("hero", "decoy") contains card._data.ability.abilityCode)
+
+    def spiesOf(cards: Iterable[Card]) = cards.iterator.filter(_._data.ability.abilityCode == "spy")
+
+    def regularsOf(cards: Iterable[Card]) = cards.iterator.filter(canReplace)
 
     if (!state.ownHand.cards.exists(_._id == card._id)) {
       List.empty
     } else if (card._data.ability.abilityCode == "decoy") {
 
       val cards = (state.ownFields.siege.cards ++ state.ownFields.ranged.cards ++ state.ownFields.close.cards).toArray
-
-      val spys = cards
-        .iterator.filter(_._data.ability.abilityCode == "spy")
-
-      val normals = cards
-        .iterator.filter(canReplace)
-
+      val spies = spiesOf(cards)
+      val normals = regularsOf(cards)
 
       val randomCard =
-        if (spys.nonEmpty) spys.minBy(_._data.power).some
+        if (spies.nonEmpty) spies.minBy(_._data.power).some
         else if (normals.nonEmpty) normals.maxBy(_._data.power).some
         else None
 
@@ -232,6 +238,27 @@ object MetaGameHandler {
                         state.ownFields.siege -> CardType.Siege).maxBy(_._1.score)
 
       List(PlayCard(card._id), SelectHorn(maxType))
+    } else if (card._data.ability.abilityCode == "medic") {
+
+      def selectMedic(currentDiscard: Set[Card]): List[GameCommand] = {
+        val cards   = currentDiscard.iterator.filter(_._data.ability.abilityCode != "decoy").toArray
+        val medics  = cards.iterator.filter(_._data.ability.abilityCode == "medic")
+        val spies   = spiesOf(cards)
+        val normals = regularsOf(cards)
+
+        if (medics.nonEmpty) {
+          val selected = medics.maxBy(_._data.power)
+          MedicChooseCard(selected._id.some) :: selectMedic(currentDiscard - selected)
+        } else if (spies.nonEmpty) {
+          MedicChooseCard(spies.minBy(_._data.power)._id.some) :: Nil
+        } else if (normals.nonEmpty) {
+          MedicChooseCard(normals.maxBy(_._data.power)._id.some) :: Nil
+        } else {
+          MedicChooseCard(None) :: Nil
+        }
+      }
+
+      PlayCard(card._id) :: selectMedic(state.ownSide.discard - card)
     } else {
       List(PlayCard(card._id))
     }

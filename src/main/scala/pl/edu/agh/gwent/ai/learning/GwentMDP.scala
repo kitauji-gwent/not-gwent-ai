@@ -4,7 +4,6 @@ import cats.effect.IO
 import org.deeplearning4j.gym.StepReply
 import org.deeplearning4j.rl4j.mdp.MDP
 import org.deeplearning4j.rl4j.space.{DiscreteSpace, ObservationSpace}
-import org.json.JSONObject
 import pl.edu.agh.gwent.ai.learning.GwentMDP.EnviromentSetup
 import pl.edu.agh.gwent.ai.model.commands._
 import pl.edu.agh.gwent.ai.model._
@@ -12,8 +11,13 @@ import pl.edu.agh.gwent.ai.model._
 class GwentMDP(
   esFactory: IO[GameES],
   closeOp: IO[Unit],
-  env: EnviromentSetup
-) extends DiscreteMDP[GameState] {
+  val env: EnviromentSetup
+) extends DiscreteMDP[GameInstance#GameState] {
+  type GameState = GameInstance#GameState
+
+  private implicit class FixMe(state: GameState) {
+    def fix: env.gameInstance.GameState = state.asInstanceOf[env.gameInstance.GameState]
+  }
 
   private var es: GameES = _
   private var gs: GameState = _
@@ -29,7 +33,7 @@ class GwentMDP(
       _ <- closeOp
       nes <- esFactory
       _ <- IO(es = nes)
-     (ngs, wait) <- MetaGameHandler.initGameState(nes, env.agentName)
+     (ngs, wait) <- MetaGameHandler.initGameState(env.gameInstance)(nes, env.agentName)
       _ <- IO {
         gs = ngs
         shouldWait = wait
@@ -49,11 +53,11 @@ class GwentMDP(
       if (action == 0) List.empty[GameCommand]
       else if (action == 1) List(Pass)
       else {
-        val card = GwentActionSpace.getCardOf(env.cards, action - 1)
-        MetaGameHandler.generateCommand(card, gs)
+        val card = env.cards(action - 1)
+        MetaGameHandler.generateCommand(env.gameInstance)(card, gs.fix)
       }
     val oldGS = gs
-    val (newGs, done) = MetaGameHandler.applyCommand(es, oldGS, commands, shouldWait).unsafeRunSync()
+    val (newGs, done) = MetaGameHandler.applyCommand(env.gameInstance)(es, oldGS.fix, commands, shouldWait).unsafeRunSync()
     gs = newGs
     shouldWait = false
     isDone = done
@@ -79,7 +83,7 @@ class GwentMDP(
       gs,
       reward,
       isDone,
-      new JSONObject()
+      null
     )
 
   }
@@ -91,6 +95,7 @@ object GwentMDP {
 
   case class EnviromentSetup(
     agentName: String,
+    gameInstance: GameInstance,
     cards: Map[CardID, Card],
     illegalMovePunish: Double = -1000d,
     ownPowerFactor: Double = 0.1d,

@@ -38,6 +38,11 @@ case class GameOver(
   winner: String
 ) extends Update
 
+case class PassingUpdate(
+  passing: Boolean,
+  _roomSide: String
+) extends Update
+
 sealed trait LobbyUpdate extends Update
 
 case class NameUpdate(name: UserID) extends LobbyUpdate

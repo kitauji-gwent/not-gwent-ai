@@ -8,8 +8,11 @@ case class BattleSide(
   score: Int,
   hand: Int,
   deck: Int,
-  discard: Set[Card]
-)
+  discard: Set[Card],
+  passing: Option[Boolean]
+) {
+  def isPassing: Boolean = passing.getOrElse(false)
+}
 
 object BattleSide {
   implicit val codec: GenCodec[BattleSide] = GenCodec.materialize
