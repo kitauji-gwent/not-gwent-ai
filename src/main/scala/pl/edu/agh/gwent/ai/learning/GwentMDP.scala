@@ -36,7 +36,7 @@ class GwentMDP(
   override def getActionSpace: DiscreteSpace = GwentActionSpace.create(env.gameInstance)
 
   override def reset(): GameState = {
-    println(s"Did rest (or initialized)")
+    println(s"Did reset (or initialized)")
     val code = for {
       nes <- esFactory
       _ <- IO(es = nes)
@@ -81,9 +81,12 @@ class GwentMDP(
         .getOrElse(powerUpReward + enemyPowerReward)
 
 
+    if (isVictorious) println("Trainee won")
+    else              println("Trainer won")
+
     new StepReply[GameState](
       gs,
-      reward,
+      reward max 0d,
       isDone,
       null
     )
@@ -183,12 +186,12 @@ object GwentMDP {
     agentName: String,
     gameInstance: GameInstance,
     cards: Map[CardID, Card],
-    illegalMovePunish: Double = -1000d,
-    ownPowerFactor: Double = 0.1d,
-    foePowerFactor: Double = 0.05d,
+    illegalMovePunish: Double = 0d,
+    ownPowerFactor: Double = 0.01d,
+    foePowerFactor: Double = 0.005d,
     victoryReward: Double = 100d,
-    drawReward: Double = 25d,
-    lossPunish: Double = -25d
+    drawReward: Double = 2.5d,
+    lossPunish: Double = 0d
   )
 
   val events = SocketIOEvents.setupEvents[Update](

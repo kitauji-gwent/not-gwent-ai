@@ -56,59 +56,46 @@ object MetaGameHandler {
     def go(state: InternalGS, update: Update): (List[Command], InternalGS) = {
       def handleStart(update: Update) = update match {
         case u@NameUpdate(n) if n.startsWith("Guest") =>
-          println(s"Got: $u")
           List.empty -> PlaceHolder("")
         case u@NameUpdate(_) =>
-          println(s"Got: $u")
           List.empty -> PlaceHolder("")
         case u@JoinRoom(id) =>
-          println(s"Got: $u")
           List.empty -> PlaceHolder(id)
         case u@InitBattle(side, fside) =>
-          println(s"Got: $u")
           val roomId = state.asInstanceOf[PlaceHolder].roomID
           List(GameLoaded(roomId), FinishRedraw) ->
             StateBuilder(roomId, side, fside)
         case u =>
-//          println(s"Got unexpected: $u")
           List.empty -> state
       }
 
       def handleInit(state: StateBuilder)(update: Update) = update match {
-        case u@HandUpdate(_roomSide, cards) if _roomSide == state.ownSideN =>
-//          println(s"Got init: $u")
+        case HandUpdate(_roomSide, cards) if _roomSide == state.ownSideN =>
           val newState = state.copy(ownHand = HandState(cards).some)
           List.empty -> newState
-        case u@HandUpdate(_, cards) =>
-//          println(s"Got init: $u")
+        case HandUpdate(_, cards) =>
           val newState = state.copy(foeHand = HandState(cards).some)
           List.empty -> newState
-        case u@InfoUpdate(_roomSide, info, l) if _roomSide == state.ownSideN =>
-//          println(s"Got init: $u")
+        case InfoUpdate(_roomSide, info, l) if _roomSide == state.ownSideN =>
           val newState = state.copy(ownLeader = l.some, ownSide = info.some)
           List.empty -> newState
-        case u@InfoUpdate(_, info, l) =>
-//          println(s"Got init: $u")
+        case InfoUpdate(_, info, l) =>
           val newState = state.copy(foeLeader = l.some, foeSide = info.some)
           List.empty -> newState
-        case u@InitBattle(_, _) =>
-//          println(s"Got init: $u")
+        case InitBattle(_, _) =>
           List(GameLoaded(state.roomID), FinishRedraw) -> state
-        case u@FieldsUpdate(_roomSide, c, r, s, w) if _roomSide == state.ownSideN =>
-//          println(s"Got init: $u")
+        case FieldsUpdate(_roomSide, c, r, s, w) if _roomSide == state.ownSideN =>
           val fields = FieldState(close = c, ranged = r, siege = s, weather = w)
           val newState = state.copy(ownFields = fields.some)
           List.empty -> newState
-        case u@FieldsUpdate(_, c, r, s, w) =>
-//          println(s"Got init: $u")
+        case FieldsUpdate(_, c, r, s, w) =>
           val fields = FieldState(close = c, ranged = r, siege = s, weather = w)
           val newState = state.copy(foeFields = fields.some)
           List.empty -> newState
         case u@WaitingUpdate(waiting) =>
           println(s"Got init($envName): $u")
           List.empty -> state.copy(isFirst = Some(waiting))
-        case u =>
-//          println(s"Got init: $u")
+        case _ =>
           List.empty -> state
       }
 
@@ -149,10 +136,6 @@ object MetaGameHandler {
       currentState: GameState,
       update: Update
     ): IO[(GameState, Boolean)] = {
-//      val fieldCards = currentState.ownFields.close.cards ++ currentState.ownFields.ranged.cards ++ currentState.ownFields.siege.cards
-//      println(s"Current hand: ${currentState.ownSideN}, ${currentState.ownHand.cards.map(_._id).mkString("{", ", ", "}")}")
-//      println(s"Current discard: ${currentState.ownSideN}, ${currentState.ownSide.discard.map(_._id).mkString("{", ", ", "}")}")
-//      println(s"Current fields: ${currentState.ownSideN}, ${fieldCards.map(_._id).mkString("{", ", ", "}")}")
       update match {
         case i: InfoUpdate =>        IO.pure((currentState.applyUpdate(i), false))
         case f: FieldsUpdate =>      IO.pure((currentState.applyUpdate(f), false))
