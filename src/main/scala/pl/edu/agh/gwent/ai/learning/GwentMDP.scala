@@ -57,6 +57,7 @@ class GwentMDP(
     //action 1 - pass
     //action N - play card with id {N - 1}
     val commands = GwentMDP.getCommandsOf(env)(gs.fix, action)
+    println(s"Trying to send commands: ($action) $commands")
     val oldGS = gs
     val (newGs, done) = MetaGameHandler.applyCommand(env.gameInstance)(es, oldGS.fix, commands, shouldWait).unsafeRunSync()
     gs = newGs

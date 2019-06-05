@@ -29,7 +29,7 @@ class SocketIOEvents[C, U](
   override def publish(commands: Stream[IO, C]): IO[Unit] =
     commands.evalMap(c =>
       if (eventBodyF(c))
-        IO(println(s"sending: $c")).flatMap(_ => IO(socket.emit(eventNameF(c), encode(c))))
+        IO(socket.emit(eventNameF(c), encode(c)))
       else
         IO(socket.emit(eventNameF(c)))
     ).compile.drain
@@ -140,7 +140,10 @@ object SocketIOEvents {
     for {
       queue <- Queue.bounded[IO, U](1000)
       sock <- create(queue)
-    } yield new SocketIOEvents(sock, queue, eventNameF, eventBodyF) -> IO(sock.close())
+    } yield new SocketIOEvents(sock, queue, eventNameF, eventBodyF) -> IO {
+      println("closing event stream")
+      sock.close()
+    }
 
   }
 

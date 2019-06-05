@@ -70,37 +70,37 @@ object MetaGameHandler {
           List(GameLoaded(roomId), FinishRedraw) ->
             StateBuilder(roomId, side, fside)
         case u =>
-          println(s"Got unexpected: $u")
+//          println(s"Got unexpected: $u")
           List.empty -> state
       }
 
       def handleInit(state: StateBuilder)(update: Update) = update match {
         case u@HandUpdate(_roomSide, cards) if _roomSide == state.ownSideN =>
-          println(s"Got init: $u")
+//          println(s"Got init: $u")
           val newState = state.copy(ownHand = HandState(cards).some)
           List.empty -> newState
         case u@HandUpdate(_, cards) =>
-          println(s"Got init: $u")
+//          println(s"Got init: $u")
           val newState = state.copy(foeHand = HandState(cards).some)
           List.empty -> newState
         case u@InfoUpdate(_roomSide, info, l) if _roomSide == state.ownSideN =>
-          println(s"Got init: $u")
+//          println(s"Got init: $u")
           val newState = state.copy(ownLeader = l.some, ownSide = info.some)
           List.empty -> newState
         case u@InfoUpdate(_, info, l) =>
-          println(s"Got init: $u")
+//          println(s"Got init: $u")
           val newState = state.copy(foeLeader = l.some, foeSide = info.some)
           List.empty -> newState
         case u@InitBattle(_, _) =>
-          println(s"Got init: $u")
+//          println(s"Got init: $u")
           List(GameLoaded(state.roomID), FinishRedraw) -> state
         case u@FieldsUpdate(_roomSide, c, r, s, w) if _roomSide == state.ownSideN =>
-          println(s"Got init: $u")
+//          println(s"Got init: $u")
           val fields = FieldState(close = c, ranged = r, siege = s, weather = w)
           val newState = state.copy(ownFields = fields.some)
           List.empty -> newState
         case u@FieldsUpdate(_, c, r, s, w) =>
-          println(s"Got init: $u")
+//          println(s"Got init: $u")
           val fields = FieldState(close = c, ranged = r, siege = s, weather = w)
           val newState = state.copy(foeFields = fields.some)
           List.empty -> newState
@@ -108,7 +108,7 @@ object MetaGameHandler {
           println(s"Got init($envName): $u")
           List.empty -> state.copy(isFirst = Some(waiting))
         case u =>
-          println(s"Got init: $u")
+//          println(s"Got init: $u")
           List.empty -> state
       }
 
