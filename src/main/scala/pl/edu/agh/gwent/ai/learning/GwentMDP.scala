@@ -36,6 +36,7 @@ class GwentMDP(
   override def getActionSpace: DiscreteSpace = GwentActionSpace.create(env.gameInstance)
 
   override def reset(): GameState = {
+    println(s"Did rest (or initialized)")
     val code = for {
       nes <- esFactory
       _ <- IO(es = nes)
@@ -165,8 +166,15 @@ object GwentMDP {
     if (action == 0) List.empty[GameCommand]
     else if (action == 1) List(Pass)
     else {
-      val card = env.cards(action - 1)
-      MetaGameHandler.generateCommand(env.gameInstance)(card, gs)
+      //temporarily disabling this cause implementing it would be hard going for slower option with filtering hand
+//      val card = env.cards(action - 1)
+      val cardOpt = gs.ownHand.cards.find(_._id == action)
+      cardOpt match {
+        case Some(card) =>
+          MetaGameHandler.generateCommand(env.gameInstance)(card, gs)
+        case None =>
+          List.empty[GameCommand]
+      }
     }
   }
 

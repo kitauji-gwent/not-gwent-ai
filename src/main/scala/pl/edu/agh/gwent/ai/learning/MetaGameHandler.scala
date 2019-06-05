@@ -11,7 +11,6 @@ import pl.edu.agh.gwent.ai.model._
 
 import scala.concurrent.ExecutionContext
 
-
 object MetaGameHandler {
 
   private implicit val cs: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
@@ -43,7 +42,7 @@ object MetaGameHandler {
 
       def build: Option[GameState] =
         (ownLeader, foeLeader, ownSide, foeSide, ownFields, foeFields, ownHand, foeHand)
-          .mapN(GameState(_, _,ownSideN, foeSideN, _, _, _, _, _, _))
+          .mapN(GameState(_, _,ownSideN, foeSideN, _, _, _, _, _, _)) <* isFirst
 
     }
 
@@ -71,7 +70,7 @@ object MetaGameHandler {
           List(GameLoaded(roomId), FinishRedraw) ->
             StateBuilder(roomId, side, fside)
         case u =>
-          println(s"Go unexpected: $u")
+          println(s"Got unexpected: $u")
           List.empty -> state
       }
 
@@ -106,7 +105,7 @@ object MetaGameHandler {
           val newState = state.copy(foeFields = fields.some)
           List.empty -> newState
         case u@WaitingUpdate(waiting) =>
-          println(s"Got init: $u")
+          println(s"Got init($envName): $u")
           List.empty -> state.copy(isFirst = Some(waiting))
         case u =>
           println(s"Got init: $u")
@@ -122,13 +121,17 @@ object MetaGameHandler {
 
     }
 
-
     for {
       _ <- es.publish(Stream(Name(envName), ChooseDeck(`Northern-Kingdoms`), Enqueue))
-      gs <- es.events.scan(placeHolder)((old, up) => go(old._2, up)).evalMap({
-        case (commands, state) =>
-          es.publish(Stream.emits(commands)) as (state.build product state.isFirst)
-      }).collectFirst({ case Some(p) => p }).compile.toList
+      gs <- es.events.evalScan(placeHolder)({
+        case ((oldComs, oldState), update) =>
+          val p@(commands, _) = go(oldState, update)
+          es.publish(Stream.emits(commands)) as p
+      }).collectFirst({
+        case (_, gs) if gs.build.isDefined =>
+          println(s"Reporting ($envName) ${gs.isFirst.get}")
+          (gs.build product gs.isFirst).get
+      }).compile.toList
     } yield gs.head
 
   }
@@ -146,7 +149,10 @@ object MetaGameHandler {
       currentState: GameState,
       update: Update
     ): IO[(GameState, Boolean)] = {
-      println(s"Current hand: ${currentState.ownSideN}, ${currentState.ownHand.cards.map(_._id).mkString("{", ", ", "}")}")
+//      val fieldCards = currentState.ownFields.close.cards ++ currentState.ownFields.ranged.cards ++ currentState.ownFields.siege.cards
+//      println(s"Current hand: ${currentState.ownSideN}, ${currentState.ownHand.cards.map(_._id).mkString("{", ", ", "}")}")
+//      println(s"Current discard: ${currentState.ownSideN}, ${currentState.ownSide.discard.map(_._id).mkString("{", ", ", "}")}")
+//      println(s"Current fields: ${currentState.ownSideN}, ${fieldCards.map(_._id).mkString("{", ", ", "}")}")
       update match {
         case i: InfoUpdate =>        IO.pure((currentState.applyUpdate(i), false))
         case f: FieldsUpdate =>      IO.pure((currentState.applyUpdate(f), false))
