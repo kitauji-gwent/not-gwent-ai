@@ -1,41 +1,25 @@
 package pl.edu.agh.gwent.ai
 
 import cats.Order
-import cats.effect.{ExitCode, IO, IOApp}
-import cats.syntax.all._
+import cats.effect._
 import cats.instances.int._
 import cats.instances.list._
-import com.avsystem.commons.serialization.GenCodec
+import cats.syntax.all._
+import fs2._
 import pl.edu.agh.gwent.ai.client.{EventStream, SocketIOEvents}
+import pl.edu.agh.gwent.ai.learning.GwentMDP.{EnviromentSetup, HandWrittenBot}
+import pl.edu.agh.gwent.ai.learning.{GwentMDP, MetaGameHandler}
 import pl.edu.agh.gwent.ai.model._
 import pl.edu.agh.gwent.ai.model.commands._
 import pl.edu.agh.gwent.ai.model.updates._
-import fs2._
-import pl.edu.agh.gwent.ai.learning.MetaGameHandler
 
 
 object Main extends IOApp {
   override def run(args: List[String]): IO[ExitCode] = {
 
-    val events = SocketIOEvents.setupEvents[Update](
-      "response:name" -> GenCodec[NameUpdate],
-      "init:battle" -> GenCodec[InitBattle],
-      "response:joinRoom" -> GenCodec[JoinRoom],
-      "set:waiting" -> GenCodec[WaitingUpdate],
-      "set:passing" -> GenCodec[NoOpAck],
-      "played:medic" -> GenCodec[NoOpAck],
-      "played:emreis_leader4" -> GenCodec[NoOpAck],
-      "played:agile" -> GenCodec[NoOpAck],
-      "played:horn" -> GenCodec[PlayedUpdate],
-      "update:hand" -> GenCodec[HandUpdate],
-      "update:fields" -> GenCodec[FieldsUpdate],
-      "update:info" -> GenCodec[InfoUpdate],
-      "set:passing" -> GenCodec[PassingUpdate],
-      "gameover" -> GenCodec[GameOver]
-    )
-
     def simpleHandler(
-      es: EventStream[IO, Stream[IO, ?], Command, Update]
+      es: EventStream[IO, Stream[IO, ?], Command, Update],
+      name: String
     ): IO[Unit] = {
 
       implicit val order: Order[Card] = Order.by[Card, Int](_._data.power)
@@ -67,7 +51,7 @@ object Main extends IOApp {
       } yield (gs, isOver)
 
       for {
-        (gs, shouldWait) <- MetaGameHandler.initGameState(defaultInstance)(es, "test42")
+        (gs, shouldWait) <- MetaGameHandler.initGameState(defaultInstance)(es, name)
         _ <- IO(println(s"Current state: ${gs.toArray.mkString("[", ", ", "]")}"))
         _ <- Stream.iterateEval((gs, shouldWait, false))({
           case (state, sw, end) =>
@@ -76,9 +60,15 @@ object Main extends IOApp {
       } yield ()
     }
 
-    SocketIOEvents.make[Command, Update]("http://localhost:16918", events, _.event, _.hasBody).use { es =>
-      simpleHandler(es) as ExitCode.Success
-    }
+    SocketIOEvents.make[Command, Update]("http://localhost:16918", GwentMDP.events, _.event, _.hasBody).use { es =>
+      for {
+        myStream <- GwentMDP.manualyClosed(
+          EnviromentSetup("player1", defaultInstance, Map.empty),
+          player = new HandWrittenBot(es, "player2", defaultInstance)
+        ).flatten
+        _ <- simpleHandler(myStream, "player1")
+      } yield ExitCode.Success
+    } as ExitCode.Success
 
   }
 }

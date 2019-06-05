@@ -1,12 +1,20 @@
 package pl.edu.agh.gwent.ai.learning
 
-import cats.effect.IO
+import cats.Order
+import cats.effect.concurrent.{MVar, Ref}
+import cats.effect.{ContextShift, Fiber, IO}
+import com.avsystem.commons.serialization.GenCodec
 import org.deeplearning4j.gym.StepReply
 import org.deeplearning4j.rl4j.mdp.MDP
+import org.deeplearning4j.rl4j.policy.DQNPolicy
 import org.deeplearning4j.rl4j.space.{DiscreteSpace, ObservationSpace}
+import pl.edu.agh.gwent.ai.client.SocketIOEvents
 import pl.edu.agh.gwent.ai.learning.GwentMDP.EnviromentSetup
-import pl.edu.agh.gwent.ai.model.commands._
 import pl.edu.agh.gwent.ai.model._
+import pl.edu.agh.gwent.ai.model.commands._
+import pl.edu.agh.gwent.ai.model.updates._
+
+import scala.concurrent.ExecutionContext
 
 class GwentMDP(
   esFactory: IO[GameES],
@@ -86,6 +94,70 @@ class GwentMDP(
 }
 
 object GwentMDP {
+  import cats.instances.int._
+  import cats.instances.list._
+  import cats.syntax.all._
+  import fs2._
+
+  implicit val cs: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
+
+  trait Player {
+    def play: IO[Fiber[IO, Unit]]
+  }
+
+  class HandWrittenBot(es: GameES, name: String, val inst: GameInstance) extends Player {
+    type GameState = inst.GameState
+
+    def play: IO[Fiber[IO, Unit]] = {
+
+      implicit val order: Order[Card] = Order.by[Card, Int](_._data.power)
+
+      def selectCard(state: GameState): Option[Card] = {
+        state.ownHand.cards
+          .iterator
+          .toList
+          .maximumOption
+      }
+
+      def handleTick(old: GameState, shouldWait: Boolean): IO[(GameState, Boolean)] = for {
+        _ <- if (shouldWait) {
+          es.events.collectFirst({ case WaitingUpdate(false) => }).compile.drain
+        } else {
+          IO.unit
+        }
+        card <- IO(selectCard(old))
+        commands = card.map(MetaGameHandler.generateCommand(inst)(_, old)).getOrElse(List.empty)
+        _ <- IO(println(s"Selected card: $card"))
+        _ <- IO(println(s"Selected commands: $commands"))
+
+        (gs, isOver) <-
+        if ((old.ownSide.score > old.foeSide.score && old.foeSide.isPassing) || commands.isEmpty)
+          MetaGameHandler.applyCommand(inst)(es, old, List(Pass), shouldWait = false)
+        else
+          MetaGameHandler.applyCommand(inst)(es, old, commands, shouldWait = false)
+
+      } yield (gs, isOver)
+
+      val code = for {
+        (gs, shouldWait) <- MetaGameHandler.initGameState(inst)(es, name)
+        _ <- IO(println(s"Current state: ${gs.toArray.mkString("[", ", ", "]")}"))
+        _ <- Stream.iterateEval((gs, shouldWait, false))({
+          case (state, sw, end) =>
+            handleTick(state, sw).map { case (ns, nend) => (ns, false, nend) }
+        }).takeWhile(!_._3).compile.drain
+      } yield ()
+
+      code.start
+    }
+
+  }
+
+  class PolicyExecutor(mdp: GwentMDP, policy: DQNPolicy[GameInstance#GameState]) {
+
+    policy.play(mdp)
+
+
+  }
 
   def getCommandsOf(env: EnviromentSetup)(gs: env.gameInstance.GameState, action: Int): List[GameCommand] = {
     //action 0 - do nothing
@@ -111,5 +183,35 @@ object GwentMDP {
     lossPunish: Double = -25d
   )
 
-  def default: GwentMDP = ???
+  val events = SocketIOEvents.setupEvents[Update](
+    "response:name" -> GenCodec[NameUpdate],
+    "init:battle" -> GenCodec[InitBattle],
+    "response:joinRoom" -> GenCodec[JoinRoom],
+    "set:waiting" -> GenCodec[WaitingUpdate],
+    "set:passing" -> GenCodec[NoOpAck],
+    "played:medic" -> GenCodec[NoOpAck],
+    "played:emreis_leader4" -> GenCodec[NoOpAck],
+    "played:agile" -> GenCodec[NoOpAck],
+    "played:horn" -> GenCodec[PlayedUpdate],
+    "update:hand" -> GenCodec[HandUpdate],
+    "update:fields" -> GenCodec[FieldsUpdate],
+    "update:info" -> GenCodec[InfoUpdate],
+    "set:passing" -> GenCodec[PassingUpdate],
+    "gameover" -> GenCodec[GameOver]
+  )
+
+  def manualyClosed(env: EnviromentSetup, url: String = "http://localhost:16918", player: Player): IO[IO[GameES]] =
+    for {
+      streamRef <- MVar[IO].empty[GameES]
+      restartCode <- Ref[IO].of(IO.unit)
+      startCode = restartCode.get.flatten *> {
+        val code = SocketIOEvents.make[Command, Update]("http://localhost:16918", events, _.event, _.hasBody).use { es =>
+          streamRef.put(es) <* IO.never
+        }
+        (player.play, code.start).mapN(_ product _).flatTap(fib => restartCode.set(fib.cancel))
+      }
+    } yield startCode *> streamRef.take
+
+
+  def default(player: Player, envSetup: EnviromentSetup): GwentMDP = ???
 }
