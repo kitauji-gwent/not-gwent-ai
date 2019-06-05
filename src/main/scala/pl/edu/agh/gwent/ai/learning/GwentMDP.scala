@@ -1,7 +1,7 @@
 package pl.edu.agh.gwent.ai.learning
 
 import cats.Order
-import cats.effect.concurrent.{MVar, Ref}
+import cats.effect.concurrent.Ref
 import cats.effect.{ContextShift, Fiber, IO}
 import com.avsystem.commons.serialization.GenCodec
 import org.deeplearning4j.gym.StepReply
@@ -88,7 +88,7 @@ class GwentMDP(
 
   }
 
-  override def newInstance(): MDP[GameState, Integer, DiscreteSpace] = ???
+  override def newInstance(): MDP[GameState, Integer, DiscreteSpace] = new GwentMDP(esFactory, env)
 }
 
 object GwentMDP {
@@ -103,58 +103,59 @@ object GwentMDP {
     def play: IO[Fiber[IO, Unit]]
   }
 
-  class HandWrittenBot(es: GameES, name: String, val inst: GameInstance) extends Player {
+  def playInternal(es: GameES, inst: GameInstance, name: String): IO[Unit] = {
     type GameState = inst.GameState
 
-    def play: IO[Fiber[IO, Unit]] = {
+    implicit val order: Order[Card] = Order.by[Card, Int](_._data.power)
 
-      implicit val order: Order[Card] = Order.by[Card, Int](_._data.power)
-
-      def selectCard(state: GameState): Option[Card] = {
-        state.ownHand.cards
-          .iterator
-          .toList
-          .maximumOption
-      }
-
-      def handleTick(old: GameState, shouldWait: Boolean): IO[(GameState, Boolean)] = for {
-        _ <- if (shouldWait) {
-          es.events.collectFirst({ case WaitingUpdate(false) => }).compile.drain
-        } else {
-          IO.unit
-        }
-        card <- IO(selectCard(old))
-        commands = card.map(MetaGameHandler.generateCommand(inst)(_, old)).getOrElse(List.empty)
-        _ <- IO(println(s"Selected card: $card"))
-        _ <- IO(println(s"Selected commands: $commands"))
-
-        (gs, isOver) <-
-        if ((old.ownSide.score > old.foeSide.score && old.foeSide.isPassing) || commands.isEmpty)
-          MetaGameHandler.applyCommand(inst)(es, old, List(Pass), shouldWait = false)
-        else
-          MetaGameHandler.applyCommand(inst)(es, old, commands, shouldWait = false)
-
-      } yield (gs, isOver)
-
-      val code = for {
-        (gs, shouldWait) <- MetaGameHandler.initGameState(inst)(es, name)
-        _ <- IO(println(s"Current state: ${gs.toArray.mkString("[", ", ", "]")}"))
-        _ <- Stream.iterateEval((gs, shouldWait, false))({
-          case (state, sw, end) =>
-            handleTick(state, sw).map { case (ns, nend) => (ns, false, nend) }
-        }).takeWhile(!_._3).compile.drain
-      } yield ()
-
-      code.start
+    def selectCard(state: GameState): Option[Card] = {
+      state.ownHand.cards
+        .iterator
+        .toList
+        .maximumOption
     }
+
+    def handleTick(old: GameState, shouldWait: Boolean): IO[(GameState, Boolean)] = for {
+      _ <- if (shouldWait) {
+        es.events.collectFirst({ case WaitingUpdate(false) => }).compile.drain
+      } else {
+        IO.unit
+      }
+      card <- IO(selectCard(old))
+      commands = card.map(MetaGameHandler.generateCommand(inst)(_, old)).getOrElse(List.empty)
+      _ <- IO(println(s"Selected card: $card"))
+      _ <- IO(println(s"Selected commands: $commands"))
+
+      (gs, isOver) <-
+      if ((old.ownSide.score > old.foeSide.score && old.foeSide.isPassing) || commands.isEmpty)
+        MetaGameHandler.applyCommand(inst)(es, old, List(Pass), shouldWait = false)
+      else
+        MetaGameHandler.applyCommand(inst)(es, old, commands, shouldWait = false)
+
+    } yield (gs, isOver)
+
+    for {
+      (gs, shouldWait) <- MetaGameHandler.initGameState(inst)(es, name)
+      _ <- IO(println(s"Current state: ${gs.toArray.mkString("[", ", ", "]")}"))
+      _ <- Stream.iterateEval((gs, shouldWait, false))({
+        case (state, sw, end) =>
+          handleTick(state, sw).map { case (ns, nend) => (ns, false, nend) }
+      }).takeWhile(!_._3).compile.drain
+    } yield ()
+  }
+
+  class HandWrittenBot(name: String, val inst: GameInstance,
+                       uri: String = "http://localhost:16918") extends Player {
+    type GameState = inst.GameState
+
+    def play: IO[Fiber[IO, Unit]] =
+      SocketIOEvents.unsafe[Command, Update]("http://localhost:16918", events, _.event, _.hasBody)
+        .flatMap({ case (s, cb) => playInternal(s, inst, name).guarantee(cb) }).start
 
   }
 
   class PolicyExecutor(mdp: GwentMDP, policy: DQNPolicy[GameInstance#GameState]) {
-
     policy.play(mdp)
-
-
   }
 
   def getCommandsOf(env: EnviromentSetup)(gs: env.gameInstance.GameState, action: Int): List[GameCommand] = {
@@ -198,33 +199,21 @@ object GwentMDP {
     "gameover" -> GenCodec[GameOver]
   )
 
-  def manualClosed(env: EnviromentSetup, url: String = "http://localhost:16918", player: Player): IO[IO[GameES]] =
-    for {
-      streamRef <- MVar[IO].empty[GameES]
-      restartCode <- Ref[IO].of(IO.unit)
-      startCode = restartCode.get.flatten *> {
-        val code = SocketIOEvents.make[Command, Update]("http://localhost:16918", events, _.event, _.hasBody).use { es =>
-          streamRef.put(es) <* IO.never
-        }
-        (player.play, code.start).mapN(_ product _).flatTap(fib => restartCode.set(fib.cancel))
+  def manualClosed(url: String = "http://localhost:16918", player: Player): IO[IO[GameES]] = {
+    Ref[IO].of(IO.unit).map { ref =>
+      ref.get.flatten *>
+      SocketIOEvents.unsafe[Command, Update]("http://localhost:16918", events, _.event, _.hasBody).flatMap {
+        case (es, cb) =>
+          val setup = player.play.flatMap(es => ref.set(cb <* es.cancel))
+          setup as es
       }
-    } yield startCode *> streamRef.take
+    }
+  }
 
-  def manualClosedSingle(env: EnviromentSetup, url: String = "http://localhost:16918"): IO[IO[GameES]] =
-    for {
-      streamRef <- MVar[IO].empty[GameES]
-      restartCode <- Ref[IO].of(IO.unit)
-      startCode = restartCode.get.flatten *> {
-        val code = SocketIOEvents.make[Command, Update]("http://localhost:16918", events, _.event, _.hasBody).use { es =>
-          streamRef.put(es) <* IO.never
-        }
-        code.start.flatTap(fib => restartCode.set(fib.cancel))
-      }
-    } yield startCode *> streamRef.take
-
-
-  def default(player: Player, envSetup: EnviromentSetup): IO[GwentMDP] =
-    manualClosed(envSetup, player = player).flatMap(factory =>
+  def default(envSetup: EnviromentSetup): IO[GwentMDP] = {
+    val player = new HandWrittenBot("manual-bot", envSetup.gameInstance)
+    manualClosed(player = player).flatMap(factory =>
       IO(new GwentMDP(factory, envSetup))
     )
+  }
 }

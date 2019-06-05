@@ -29,7 +29,7 @@ class SocketIOEvents[C, U](
   override def publish(commands: Stream[IO, C]): IO[Unit] =
     commands.evalMap(c =>
       if (eventBodyF(c))
-        IO(socket.emit(eventNameF(c), encode(c)))
+        IO(println(s"sending: $c")).flatMap(_ => IO(socket.emit(eventNameF(c), encode(c))))
       else
         IO(socket.emit(eventNameF(c)))
     ).compile.drain
@@ -115,6 +115,33 @@ object SocketIOEvents {
       queue <- Resource.liftF(Queue.bounded[IO, U](1000))
       sock <- Resource.make(create(queue))(s => IO(s.close()))
     } yield new SocketIOEvents(sock, queue, eventNameF, eventBodyF)
+  }
+
+  def unsafe[C, U](
+    uri: String,
+    events: UpdateSetup[U],
+    eventNameF: C => String,
+    eventBodyF: C => Boolean
+  )(implicit
+    commandCodec: GenCodec[C],
+    cs: ContextShift[IO]
+  ): IO[(EventStream[IO, Stream[IO, ?], C, U], IO[Unit])] = {
+
+
+    def create(queue: Queue[IO, U]) = IO {
+      val sock = SIO.socket(uri)
+      events.foldLeft(sock: Emitter) {
+        case (s, (ev, decode)) =>
+          s.on(ev, (args: Array[AnyRef]) => queue.enqueue1(decode(args(0))).unsafeRunSync())
+      }
+      sock.connect()
+    }
+
+    for {
+      queue <- Queue.bounded[IO, U](1000)
+      sock <- create(queue)
+    } yield new SocketIOEvents(sock, queue, eventNameF, eventBodyF) -> IO(sock.close())
+
   }
 
 }
