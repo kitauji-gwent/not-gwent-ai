@@ -24,9 +24,9 @@ class GwentMDP(
   var shouldWait: Boolean = false
   var isDone: Boolean = false
 
-  override def getObservationSpace: ObservationSpace[GameState] = null
+  override def getObservationSpace: ObservationSpace[GameState] = GwentObservationSpace.create(env.gameInstance)
 
-  override def getActionSpace: DiscreteSpace = GwentActionSpace.create(0, 42)
+  override def getActionSpace: DiscreteSpace = GwentActionSpace.create(env.gameInstance)
 
   override def reset(): GameState = {
     val code = for {
@@ -49,13 +49,7 @@ class GwentMDP(
     //action 0 - do nothing
     //action 1 - pass
     //action N - play card with id {N - 1}
-    val commands =
-      if (action == 0) List.empty[GameCommand]
-      else if (action == 1) List(Pass)
-      else {
-        val card = env.cards(action - 1)
-        MetaGameHandler.generateCommand(env.gameInstance)(card, gs.fix)
-      }
+    val commands = GwentMDP.getCommandsOf(env)(gs.fix, action)
     val oldGS = gs
     val (newGs, done) = MetaGameHandler.applyCommand(env.gameInstance)(es, oldGS.fix, commands, shouldWait).unsafeRunSync()
     gs = newGs
@@ -92,6 +86,18 @@ class GwentMDP(
 }
 
 object GwentMDP {
+
+  def getCommandsOf(env: EnviromentSetup)(gs: env.gameInstance.GameState, action: Int): List[GameCommand] = {
+    //action 0 - do nothing
+    //action 1 - pass
+    //action N - play card with id {N - 1}
+    if (action == 0) List.empty[GameCommand]
+    else if (action == 1) List(Pass)
+    else {
+      val card = env.cards(action - 1)
+      MetaGameHandler.generateCommand(env.gameInstance)(card, gs)
+    }
+  }
 
   case class EnviromentSetup(
     agentName: String,
