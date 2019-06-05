@@ -17,8 +17,7 @@ import pl.edu.agh.gwent.ai.model.updates._
 import scala.concurrent.ExecutionContext
 
 class GwentMDP(
-  esFactory: IO[GameES],
-  closeOp: IO[Unit],
+  esFactory: IO[GameES], //evaluation causes previous instance of the game-stream to close
   val env: EnviromentSetup
 ) extends DiscreteMDP[GameInstance#GameState] {
   type GameState = GameInstance#GameState
@@ -38,7 +37,6 @@ class GwentMDP(
 
   override def reset(): GameState = {
     val code = for {
-      _ <- closeOp
       nes <- esFactory
       _ <- IO(es = nes)
      (ngs, wait) <- MetaGameHandler.initGameState(env.gameInstance)(nes, env.agentName)
@@ -51,7 +49,7 @@ class GwentMDP(
     code.unsafeRunSync()
   }
 
-  override def close(): Unit = closeOp.unsafeRunSync()
+  override def close(): Unit = esFactory.unsafeRunSync()
 
   override def step(action: Integer): StepReply[GameState] = {
     //action 0 - do nothing
@@ -200,7 +198,7 @@ object GwentMDP {
     "gameover" -> GenCodec[GameOver]
   )
 
-  def manualyClosed(env: EnviromentSetup, url: String = "http://localhost:16918", player: Player): IO[IO[GameES]] =
+  def manualClosed(env: EnviromentSetup, url: String = "http://localhost:16918", player: Player): IO[IO[GameES]] =
     for {
       streamRef <- MVar[IO].empty[GameES]
       restartCode <- Ref[IO].of(IO.unit)
@@ -212,6 +210,21 @@ object GwentMDP {
       }
     } yield startCode *> streamRef.take
 
+  def manualClosedSingle(env: EnviromentSetup, url: String = "http://localhost:16918"): IO[IO[GameES]] =
+    for {
+      streamRef <- MVar[IO].empty[GameES]
+      restartCode <- Ref[IO].of(IO.unit)
+      startCode = restartCode.get.flatten *> {
+        val code = SocketIOEvents.make[Command, Update]("http://localhost:16918", events, _.event, _.hasBody).use { es =>
+          streamRef.put(es) <* IO.never
+        }
+        code.start.flatTap(fib => restartCode.set(fib.cancel))
+      }
+    } yield startCode *> streamRef.take
 
-  def default(player: Player, envSetup: EnviromentSetup): GwentMDP = ???
+
+  def default(player: Player, envSetup: EnviromentSetup): IO[GwentMDP] =
+    manualClosed(envSetup, player = player).flatMap(factory =>
+      IO(new GwentMDP(factory, envSetup))
+    )
 }

@@ -62,7 +62,7 @@ object Main extends IOApp {
 
     SocketIOEvents.make[Command, Update]("http://localhost:16918", GwentMDP.events, _.event, _.hasBody).use { es =>
       for {
-        myStream <- GwentMDP.manualyClosed(
+        myStream <- GwentMDP.manualClosed(
           EnviromentSetup("player1", defaultInstance, Map.empty),
           player = new HandWrittenBot(es, "player2", defaultInstance)
         ).flatten
