@@ -139,16 +139,11 @@ object MetaGameHandler {
       update match {
         case i: InfoUpdate =>        IO.pure((currentState.applyUpdate(i), false))
         case f: FieldsUpdate =>      IO.pure((currentState.applyUpdate(f), false))
-        case h: HandUpdate =>
-          println(s"Updating hand: ${h._roomSide}, ${h.cards.map(_._id).mkString("{", ", ", "}")}")
-                                     IO.pure((currentState.applyUpdate(h), false))
-
-        case p: PassingUpdate =>
-          println(s"Updating round state: $p")
-                                     IO.pure((currentState.applyPassing(p), false))
+        case h: HandUpdate =>        IO.pure((currentState.applyUpdate(h), false))
+        case p: PassingUpdate =>     IO.pure((currentState.applyPassing(p), false))
         case WaitingUpdate(false) => IO.pure((currentState, true))
-
-        case GameOver(_)          =>
+        case GameOver(w)          =>
+          println(s"Received game-over: $w, with state: ${currentState.ownSide.lives} vs ${currentState.foeSide.lives}")
           overSignal.complete(true) as (currentState, true)
         case _ =>                    IO.pure((currentState, false))
       }
@@ -166,7 +161,8 @@ object MetaGameHandler {
         .evalScan(oldState -> false) {
           case ((oldGs, false), up) =>
             handleUpdate(isOverP)(oldGs, up)
-          case (p, _) =>
+          case (p, up) =>
+            println(s"Ups might have messed-up state: $up")
             IO.pure(p)
         }
         .collectFirst {

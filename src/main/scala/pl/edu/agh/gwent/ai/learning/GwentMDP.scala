@@ -57,7 +57,6 @@ class GwentMDP(
     //action 1 - pass
     //action N - play card with id {N - 1}
     val commands = GwentMDP.getCommandsOf(env)(gs.fix, action)
-    println(s"Trying to send commands: ($action) $commands")
     val oldGS = gs
     val (newGs, done) = MetaGameHandler.applyCommand(env.gameInstance)(es, oldGS.fix, commands, shouldWait).unsafeRunSync()
     gs = newGs
@@ -79,10 +78,6 @@ class GwentMDP(
       else if (isDraw) env.drawReward
       else illegalActionPunishment
         .getOrElse(powerUpReward + enemyPowerReward)
-
-
-    if (isVictorious) println("Trainee won")
-    else              println("Trainer won")
 
     new StepReply[GameState](
       gs,
@@ -128,8 +123,6 @@ object GwentMDP {
       }
       card <- IO(selectCard(old))
       commands = card.map(MetaGameHandler.generateCommand(inst)(_, old)).getOrElse(List.empty)
-      _ <- IO(println(s"Selected card: $card"))
-      _ <- IO(println(s"Selected commands: $commands"))
 
       (gs, isOver) <-
       if ((old.ownSide.score > old.foeSide.score && old.foeSide.isPassing) || commands.isEmpty)
@@ -141,7 +134,6 @@ object GwentMDP {
 
     for {
       (gs, shouldWait) <- MetaGameHandler.initGameState(inst)(es, name)
-      _ <- IO(println(s"Current state: ${gs.toArray.mkString("[", ", ", "]")}"))
       _ <- Stream.iterateEval((gs, shouldWait, false))({
         case (state, sw, end) =>
           handleTick(state, sw).map { case (ns, nend) => (ns, false, nend) }
@@ -186,9 +178,9 @@ object GwentMDP {
     agentName: String,
     gameInstance: GameInstance,
     cards: Map[CardID, Card],
-    illegalMovePunish: Double = 0d,
-    ownPowerFactor: Double = 0.01d,
-    foePowerFactor: Double = 0.005d,
+    illegalMovePunish: Double = -20d,
+    ownPowerFactor: Double = 1d,
+    foePowerFactor: Double = 0.5d,
     victoryReward: Double = 100d,
     drawReward: Double = 2.5d,
     lossPunish: Double = 0d
