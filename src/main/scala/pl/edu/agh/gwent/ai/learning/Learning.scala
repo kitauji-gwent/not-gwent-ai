@@ -15,8 +15,8 @@ object Learning {
 
     val config = new QLearning.QLConfiguration(123, //Random seed
       200, //Max step By epoch
-      200000, //Max step
-      200000, //Max size of experience replay
+      2000, //Max step
+      20000, //Max size of experience replay
       32, //size of batches
       50, //target update (hard)
       10, //num step noop warmup
@@ -25,7 +25,7 @@ object Learning {
       1.0, //td-error clipping
       0.15f, //min epsilon
       1000, //num step for eps greedy anneal
-      true //double DQN
+      false //double DQN
     )
 
     val netConf = DQNFactoryStdDense.Configuration.builder().l2(0.00)

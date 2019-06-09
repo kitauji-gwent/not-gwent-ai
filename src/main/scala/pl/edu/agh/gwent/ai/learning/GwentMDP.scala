@@ -65,8 +65,8 @@ class GwentMDP(
 
     val illegalActionPunishment = if (commands.isEmpty) Some(env.illegalMovePunish) else None
 
-    val isVictorious = isDone && gs.foeSide.lives == 0
-    val isLoser = isDone && gs.ownSide.lives == 0
+    val isVictorious = isDone && gs.foeSide.lives == 1
+    val isLoser = isDone && gs.ownSide.lives == 1
     val isDraw = isDone && gs.ownSide.lives == 1 && gs.foeSide.lives == 1
 
     def powerUpReward    = env.ownPowerFactor * (gs.ownSide.score - oldGS.ownSide.score)
@@ -116,6 +116,7 @@ object GwentMDP {
     }
 
     def handleTick(old: GameState, shouldWait: Boolean): IO[(GameState, Boolean)] = for {
+      _ <- IO(println(s"Own lives: ${old.ownSide.lives}, foe lives ${old.foeSide.lives}"))
       _ <- if (shouldWait) {
         es.events.collectFirst({ case WaitingUpdate(false) => }).compile.drain
       } else {
@@ -178,11 +179,11 @@ object GwentMDP {
     agentName: String,
     gameInstance: GameInstance,
     cards: Map[CardID, Card],
-    illegalMovePunish: Double = -20d,
+    illegalMovePunish: Double = -200d,
     ownPowerFactor: Double = 1d,
     foePowerFactor: Double = 0.5d,
-    victoryReward: Double = 100d,
-    drawReward: Double = 2.5d,
+    victoryReward: Double = 200d,
+    drawReward: Double = 25d,
     lossPunish: Double = 0d
   )
 
