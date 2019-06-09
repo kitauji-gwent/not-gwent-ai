@@ -22,7 +22,7 @@ case class GameInstance(cardNum: Int) {
     foeFields: FieldState,
     ownHand: HandState,
     foeHand: HandState,
-    round: Int = 1
+    round: Int = 1,
   ) extends Encodable {
 
     private def encodeLeader(card: Card) = (ownLeader._id - cardNum / 2).toDouble / cardNum * 2
@@ -110,12 +110,12 @@ case class FieldState(
   close: Field,
   ranged: Field,
   siege: Field,
-  weather: Field
+  weather: Field,
 ) {
   def applyUpdate(update: FieldsUpdate): FieldState = FieldState(
     close = update.close,
     ranged = update.ranged,
     siege = update.siege,
-    weather = update.weather
+    weather = update.weather,
   )
 }

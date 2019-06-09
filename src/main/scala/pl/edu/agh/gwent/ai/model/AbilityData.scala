@@ -4,7 +4,6 @@ import com.avsystem.commons.serialization.{GenCodec, Input, Output}
 
 import scala.util.Try
 
-
 sealed trait AbilityData extends Product with Serializable {
   def abilityCode: String
 }

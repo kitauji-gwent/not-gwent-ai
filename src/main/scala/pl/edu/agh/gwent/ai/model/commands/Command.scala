@@ -1,17 +1,15 @@
 package pl.edu.agh.gwent.ai.model
 package commands
 
-import com.avsystem.commons.serialization.{GenCodec, flatten}
-
-object Command {
-  implicit val codec: GenCodec[Command] = GenCodec.materialize[Command]
-}
+import com.avsystem.commons.serialization.{HasGenCodec, flatten}
 
 @flatten
 sealed trait Command extends Product with Serializable {
   def event: String
   def hasBody: Boolean
 }
+
+object Command extends HasGenCodec[Command]
 
 sealed trait GameCommand extends Command
 

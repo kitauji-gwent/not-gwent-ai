@@ -10,7 +10,7 @@ case class FieldsUpdate(
   close: Field,
   ranged: Field,
   siege: Field,
-  weather: Field
+  weather: Field,
 ) extends Update
 
 case class HandUpdate(
@@ -21,26 +21,26 @@ case class HandUpdate(
 case class InfoUpdate(
   _roomSide: String,
   info: BattleSide,
-  leader: Card
+  leader: Card,
 ) extends Update
 
 case class WaitingUpdate(
-  waiting: Boolean
+  waiting: Boolean,
 ) extends Update
 
 case class PlayedUpdate(
   _roomSide: String,
   cardID: CardID,
-  _type: String
+  _type: String,
 ) extends Update
 
 case class GameOver(
-  winner: String
+  winner: String,
 ) extends Update
 
 case class PassingUpdate(
   passing: Boolean,
-  _roomSide: String
+  _roomSide: String,
 ) extends Update
 
 sealed trait LobbyUpdate extends Update

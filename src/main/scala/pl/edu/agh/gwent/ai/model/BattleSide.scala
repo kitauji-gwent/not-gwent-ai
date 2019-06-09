@@ -1,6 +1,6 @@
 package pl.edu.agh.gwent.ai.model
 
-import com.avsystem.commons.serialization.GenCodec
+import com.avsystem.commons.serialization.HasGenCodec
 
 case class BattleSide(
   name: String,
@@ -9,11 +9,9 @@ case class BattleSide(
   hand: Int,
   deck: Int,
   discard: Set[Card],
-  passing: Option[Boolean]
+  passing: Option[Boolean],
 ) {
   def isPassing: Boolean = passing.getOrElse(false)
 }
 
-object BattleSide {
-  implicit val codec: GenCodec[BattleSide] = GenCodec.materialize
-}
+object BattleSide extends HasGenCodec[BattleSide]

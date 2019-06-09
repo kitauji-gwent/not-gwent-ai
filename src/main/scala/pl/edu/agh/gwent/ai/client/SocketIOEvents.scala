@@ -91,7 +91,6 @@ object SocketIOEvents {
     codecs map { case (k, v) => k -> decode(k, v) _ }
   }
 
-
   def make[C, U](
     uri: String,
     events: UpdateSetup[U],
@@ -126,7 +125,6 @@ object SocketIOEvents {
     commandCodec: GenCodec[C],
     cs: ContextShift[IO]
   ): IO[(EventStream[IO, Stream[IO, ?], C, U], IO[Unit])] = {
-
 
     def create(queue: Queue[IO, U]) = IO {
       val sock = SIO.socket(uri)

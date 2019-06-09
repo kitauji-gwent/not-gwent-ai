@@ -1,6 +1,6 @@
 package pl.edu.agh.gwent.ai.model
 
-import com.avsystem.commons.serialization.{GenCodec, whenAbsent}
+import com.avsystem.commons.serialization.{HasGenCodec, whenAbsent}
 
 case class Card(
   _owner: UserID,
@@ -17,8 +17,6 @@ case class Card(
   @whenAbsent(Option.empty[Int])
   diff: Option[Int],
 //  diffPos: Option[Any]
-) {}
+)
 
-object Card {
-  implicit val codec: GenCodec[Card] = GenCodec.materialize
-}
+object Card extends HasGenCodec[Card]

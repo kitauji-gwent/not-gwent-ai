@@ -6,6 +6,4 @@ case class Deck(
   _originalDeck: Set[CardID],
   _deck: Set[CardID],
   _faction: Faction,
-) {
-
-}
+)

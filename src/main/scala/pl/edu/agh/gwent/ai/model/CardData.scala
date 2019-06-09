@@ -1,6 +1,6 @@
 package pl.edu.agh.gwent.ai.model
 
-import com.avsystem.commons.serialization.GenCodec
+import com.avsystem.commons.serialization.HasGenCodec
 
 case class CardData(
   name: String,
@@ -8,9 +8,7 @@ case class CardData(
   ability: AbilityData,
   img: String,
   faction: Faction,
-  `type`: CardType
+  `type`: CardType,
 )
 
-object CardData {
-  implicit val codec: GenCodec[CardData] = GenCodec.materialize
-}
+object CardData extends HasGenCodec[CardData]

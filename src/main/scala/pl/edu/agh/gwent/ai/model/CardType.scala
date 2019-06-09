@@ -3,8 +3,7 @@ package pl.edu.agh.gwent.ai.model
 import com.avsystem.commons.misc.{AbstractValueEnumCompanion, EnumCtx, ValueEnum}
 import com.avsystem.commons.serialization.GenCodec
 
-final class
-CardType(implicit val enumCtx: EnumCtx) extends ValueEnum
+final class CardType(implicit val enumCtx: EnumCtx) extends ValueEnum
 
 object CardType extends AbstractValueEnumCompanion[CardType] {
   final val CloseCombat: Value = new CardType

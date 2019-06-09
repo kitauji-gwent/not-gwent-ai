@@ -1,13 +1,11 @@
 package pl.edu.agh.gwent.ai.model
 
-import com.avsystem.commons.serialization.GenCodec
+import com.avsystem.commons.serialization.HasGenCodec
 
 case class Field(
   horn: Option[Card],
   cards: Set[Card],
-  score: Int
+  score: Int,
 )
 
-object Field {
-  implicit val codec: GenCodec[Field] = GenCodec.materialize
-}
+object Field extends HasGenCodec[Field]
