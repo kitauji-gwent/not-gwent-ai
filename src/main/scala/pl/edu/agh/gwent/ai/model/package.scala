@@ -8,7 +8,7 @@ package object model {
 
   val `Northern-Kingdoms` = "northern"
 
-  val defaultInstance = GameInstance(100) //not sensible
+  val defaultInstance = GameInstance(58) //not sensible
   type GameState = defaultInstance.GameState
   val GameState = defaultInstance.GameState
 }

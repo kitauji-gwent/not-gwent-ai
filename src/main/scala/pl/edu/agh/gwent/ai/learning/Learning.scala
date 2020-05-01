@@ -35,7 +35,7 @@ object Learning {
 
     val envSetup = EnviromentSetup(
       "test",
-      GameInstance(80),
+      GameInstance(58),
       Map.empty
     )
 
