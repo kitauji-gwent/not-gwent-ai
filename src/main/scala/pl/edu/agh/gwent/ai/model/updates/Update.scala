@@ -20,8 +20,16 @@ case class HandUpdate(
 
 case class InfoUpdate(
   _roomSide: String,
+  // infoUpdate
   info: BattleSide,
   leader: Card,
+  // handUpdate
+  cards: Set[Card],
+  // fieldsUpdate
+  close: Field,
+  ranged: Field,
+  siege: Field,
+  weather: Field,
 ) extends Update
 
 case class WaitingUpdate(
@@ -42,6 +50,8 @@ case class PassingUpdate(
   passing: Boolean,
   _roomSide: String,
 ) extends Update
+
+case class RedrawUpdate() extends Update
 
 sealed trait LobbyUpdate extends Update
 

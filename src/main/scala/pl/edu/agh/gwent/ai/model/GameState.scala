@@ -3,7 +3,7 @@ package pl.edu.agh.gwent.ai.model
 import java.nio.DoubleBuffer
 
 import org.deeplearning4j.rl4j.space.Encodable
-import pl.edu.agh.gwent.ai.model.updates.{FieldsUpdate, HandUpdate, InfoUpdate, PassingUpdate}
+import pl.edu.agh.gwent.ai.model.updates.{FieldsUpdate, InfoUpdate, PassingUpdate}
 
 //assuming cards ids go from 1 to cardNum and cardNum is smaller than a byte
 case class GameInstance(cardNum: Int) {
@@ -69,12 +69,14 @@ case class GameInstance(cardNum: Int) {
     }
 
     def applyUpdate(update: InfoUpdate): GameState = {
-        if (update._roomSide == ownSideN)
-          copy(ownSide = update.info)
-        else
-          copy(foeSide = update.info)
+      val fields = FieldState(update.close, update.ranged, update.siege, update.weather)
+      if (update._roomSide == ownSideN) {
+        copy(ownSide = update.info, ownHand = HandState(update.cards), ownFields = fields)
+      } else {
+        copy(foeSide = update.info, foeHand = HandState(update.cards), foeFields = fields)
+      }
     }
-
+/*
     def applyUpdate(update: FieldsUpdate): GameState = {
       val fields = FieldState(update.close, update.ranged, update.siege, update.weather)
       if (update._roomSide == ownSideN)
@@ -89,6 +91,7 @@ case class GameInstance(cardNum: Int) {
       else
         copy(foeHand = HandState(update.cards))
     }
+*/
 
     def applyPassing(update: PassingUpdate): GameState = {
       if (!update.passing) {

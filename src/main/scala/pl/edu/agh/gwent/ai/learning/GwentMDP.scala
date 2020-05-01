@@ -44,6 +44,7 @@ class GwentMDP(
       _ <- IO {
         gs = ngs
         shouldWait = wait
+        isDone = false
       }
     } yield ngs
 
@@ -165,7 +166,7 @@ object GwentMDP {
     else {
       //temporarily disabling this cause implementing it would be hard going for slower option with filtering hand
 //      val card = env.cards(action - 1)
-      val cardOpt = gs.ownHand.cards.find(_._id == action)
+      val cardOpt = gs.ownHand.cards.find(_._id == action - 1)
       cardOpt match {
         case Some(card) =>
           MetaGameHandler.generateCommand(env.gameInstance)(card, gs)
@@ -197,10 +198,9 @@ object GwentMDP {
     "played:emreis_leader4" -> GenCodec[NoOpAck],
     "played:agile" -> GenCodec[NoOpAck],
     "played:horn" -> GenCodec[PlayedUpdate],
-    "update:hand" -> GenCodec[HandUpdate],
-    "update:fields" -> GenCodec[FieldsUpdate],
     "update:info" -> GenCodec[InfoUpdate],
     "set:passing" -> GenCodec[PassingUpdate],
+    "redraw:cards" -> GenCodec[RedrawUpdate],
     "gameover" -> GenCodec[GameOver]
   )
 

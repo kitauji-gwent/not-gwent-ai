@@ -15,7 +15,7 @@ object MetaGameHandler {
 
   private implicit val cs: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
 
-  val `Northern-Kingdoms` = "northern"
+  val Kitauji = "kitauji2"
 
   def initGameState(inst: GameInstance)(es: GameES, envName: String): IO[(inst.GameState, Boolean)] = {
     import inst._
@@ -63,35 +63,26 @@ object MetaGameHandler {
           List.empty -> PlaceHolder(id)
         case u@InitBattle(side, fside) =>
           val roomId = state.asInstanceOf[PlaceHolder].roomID
-          List(GameLoaded(roomId), FinishRedraw) ->
+          List(GameLoaded(roomId)) ->
             StateBuilder(roomId, side, fside)
         case u =>
           List.empty -> state
       }
 
       def handleInit(state: StateBuilder)(update: Update) = update match {
-        case HandUpdate(_roomSide, cards) if _roomSide == state.ownSideN =>
-          val newState = state.copy(ownHand = HandState(cards).some)
+        case InfoUpdate(_roomSide, info, l, cards, c, r, s, w) if _roomSide == state.ownSideN =>
+          val fields = FieldState(close = c, ranged = r, siege = s, weather = w)
+          val newState = state.copy(ownLeader = l.some, ownSide = info.some, ownHand = HandState(cards).some, ownFields = fields.some)
           List.empty -> newState
-        case HandUpdate(_, cards) =>
-          val newState = state.copy(foeHand = HandState(cards).some)
-          List.empty -> newState
-        case InfoUpdate(_roomSide, info, l) if _roomSide == state.ownSideN =>
-          val newState = state.copy(ownLeader = l.some, ownSide = info.some)
-          List.empty -> newState
-        case InfoUpdate(_, info, l) =>
-          val newState = state.copy(foeLeader = l.some, foeSide = info.some)
+        case InfoUpdate(_, info, l, cards, c, r, s, w) =>
+          val fields = FieldState(close = c, ranged = r, siege = s, weather = w)
+          val newState = state.copy(foeLeader = l.some, foeSide = info.some, foeHand = HandState(cards).some, foeFields = fields.some)
           List.empty -> newState
         case InitBattle(_, _) =>
-          List(GameLoaded(state.roomID), FinishRedraw) -> state
-        case FieldsUpdate(_roomSide, c, r, s, w) if _roomSide == state.ownSideN =>
-          val fields = FieldState(close = c, ranged = r, siege = s, weather = w)
-          val newState = state.copy(ownFields = fields.some)
-          List.empty -> newState
-        case FieldsUpdate(_, c, r, s, w) =>
-          val fields = FieldState(close = c, ranged = r, siege = s, weather = w)
-          val newState = state.copy(foeFields = fields.some)
-          List.empty -> newState
+          println(s"Init battle")
+          List(GameLoaded(state.roomID)) -> state
+        case RedrawUpdate() =>
+          List(FinishRedraw) -> state
         case u@WaitingUpdate(waiting) =>
           println(s"Got init($envName): $u")
           List.empty -> state.copy(isFirst = Some(waiting))
@@ -109,7 +100,7 @@ object MetaGameHandler {
     }
 
     for {
-      _ <- es.publish(Stream(Name(envName), ChooseDeck(`Northern-Kingdoms`), Enqueue))
+      _ <- es.publish(Stream(Name(envName), ChooseDeck(Kitauji), Enqueue))
       gs <- es.events.evalScan(placeHolder)({
         case ((oldComs, oldState), update) =>
           val p@(commands, _) = go(oldState, update)
@@ -138,8 +129,8 @@ object MetaGameHandler {
     ): IO[(GameState, Boolean)] = {
       update match {
         case i: InfoUpdate =>        IO.pure((currentState.applyUpdate(i), false))
-        case f: FieldsUpdate =>      IO.pure((currentState.applyUpdate(f), false))
-        case h: HandUpdate =>        IO.pure((currentState.applyUpdate(h), false))
+//        case f: FieldsUpdate =>      IO.pure((currentState.applyUpdate(f), false))
+//        case h: HandUpdate =>        IO.pure((currentState.applyUpdate(h), false))
         case p: PassingUpdate =>     IO.pure((currentState.applyPassing(p), false))
         case WaitingUpdate(false) => IO.pure((currentState, true))
         case GameOver(w)          =>
@@ -190,7 +181,7 @@ object MetaGameHandler {
     */
   def generateCommand(inst: GameInstance)(card: Card, state: inst.GameState): List[GameCommand] = {
 
-    def canReplace(card: Card) = !(Set("hero", "decoy") contains card._data.ability.abilityCode)
+    def canReplace(card: Card) = !(card._data.ability.abilityCode.contains("hero") || card._data.ability.abilityCode.contains("decoy"))
 
     def spiesOf(cards: Iterable[Card]) = cards.iterator.filter(_._data.ability.abilityCode == "spy")
 
@@ -216,14 +207,14 @@ object MetaGameHandler {
           List.empty
       }
 
-    } else if (card._key == "commanders_horn") {
+    } else if (card._data.ability.abilityCode == "commanders_horn_card") {
 
       val (_, maxType) = List(state.ownFields.close -> CardType.CloseCombat,
                         state.ownFields.ranged -> CardType.Ranged,
                         state.ownFields.siege -> CardType.Siege).maxBy(_._1.score)
 
       List(PlayCard(card._id), SelectHorn(maxType))
-    } else if (card._data.ability.abilityCode == "medic") {
+    } else if (card._data.ability.abilityCode.contains("medic")) {
 
       def selectMedic(currentDiscard: Set[Card]): List[GameCommand] = {
         val cards   = currentDiscard.iterator.filter(_._data.ability.abilityCode != "decoy").toArray
